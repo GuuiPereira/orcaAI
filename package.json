@@ -8,7 +8,8 @@
   "scripts": {
     "mobile": "pnpm --filter @orcaai/mobile",
     "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "pnpm -r --if-present lint"
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
     "supabase": "^2.110.0"
