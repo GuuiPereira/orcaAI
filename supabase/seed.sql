@@ -1,0 +1,2 @@
+-- Local development seed data.
+-- Populate with sample organizations/customers/quotes as the app takes shape.

@@ -1,0 +1,16 @@
+{
+  "name": "orcaai",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "mobile": "pnpm --filter @orcaai/mobile",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint"
+  },
+  "devDependencies": {
+    "supabase": "^2.110.0"
+  }
+}

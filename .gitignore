@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Expo
+.expo/
+apps/*/dist/
+apps/*/web-build/
+apps/*/.expo/
+
+# Native build artifacts
+apps/*/ios/
+apps/*/android/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Supabase
+supabase/.branches
+supabase/.temp
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+
+# TypeScript
+*.tsbuildinfo
