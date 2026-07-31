@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addressSchema } from "./address";
+import { addressSchema } from "./address.ts";
 
 export const customerSchema = z.object({
   id: z.uuid(),

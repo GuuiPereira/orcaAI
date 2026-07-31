@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { addressSchema } from "./address";
-import { commercialTermsSchema } from "./commercial-terms";
-import { discountSchema } from "./discount";
+import { addressSchema } from "./address.ts";
+import { commercialTermsSchema } from "./commercial-terms.ts";
+import { discountSchema } from "./discount.ts";
 
 // Estados do docs/PRD.md §8.
 export const quoteStatusSchema = z.enum([

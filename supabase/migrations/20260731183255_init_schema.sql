@@ -314,3 +314,36 @@ create policy "quote_events_select_member" on public.quote_events
         and public.is_org_member(q.organization_id)
     )
   );
+
+-- ---------------------------------------------------------------------------
+-- Table grants
+-- ---------------------------------------------------------------------------
+-- RLS policies only filter *which rows* a role can see or touch; the role
+-- also needs the underlying SQL privilege to reach the table at all. Recent
+-- Supabase projects no longer auto-expose new tables to the Data API roles
+-- (see `auto_expose_new_tables` in supabase/config.toml), so these grants
+-- are required, not optional.
+
+grant usage on schema public to authenticated, service_role;
+
+grant select, insert, update on public.profiles to authenticated;
+grant select, insert, update on public.organizations to authenticated;
+grant select, insert, update, delete on public.organization_members to authenticated;
+grant select, insert, update, delete on public.customers to authenticated;
+grant select, insert, update, delete on public.quotes to authenticated;
+grant select, insert, update, delete on public.quote_items to authenticated;
+grant select on public.quote_versions to authenticated;
+grant select, insert, update on public.ai_interpretations to authenticated;
+grant select on public.quote_events to authenticated;
+
+grant all on
+  public.profiles,
+  public.organizations,
+  public.organization_members,
+  public.customers,
+  public.quotes,
+  public.quote_items,
+  public.quote_versions,
+  public.ai_interpretations,
+  public.quote_events
+to service_role;

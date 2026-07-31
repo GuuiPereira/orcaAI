@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { quoteItemTypeSchema } from "../domain/quote-item";
+import { quoteItemTypeSchema } from "../domain/quote-item.ts";
 
 // docs/ARCHITECTURE.md §4 - schema conceitual da IA.
 // Regra central (RF-027): a IA nunca preenche preço, quantidade, prazo ou
