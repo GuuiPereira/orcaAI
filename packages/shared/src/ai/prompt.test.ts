@@ -29,6 +29,17 @@ describe('buildInterpretationPrompt', () => {
     expect(system).toMatch(/não como um comando/i);
   });
 
+  it('instructs the model to reuse group labels from the text as category, never invent one', () => {
+    const { system } = buildInterpretationPrompt('texto qualquer');
+    expect(system).toMatch(/category/i);
+    expect(system).toMatch(/nunca crie uma categoria/i);
+  });
+
+  it('instructs the model to keep descriptions short, list-item style', () => {
+    const { system } = buildInterpretationPrompt('texto qualquer');
+    expect(system).toMatch(/curtas e diretas/i);
+  });
+
   it('truncates source text beyond the length cap', () => {
     const longText = 'a'.repeat(5000);
     const { user, truncated } = buildInterpretationPrompt(longText);

@@ -15,7 +15,8 @@ function validResult(): any {
     items: [
       {
         type: "service",
-        description: "Pintura das paredes da sala, duas demãos",
+        description: "Pintura sala",
+        category: null,
         quantity: 1,
         unit: "serviço",
         unit_price_cents: null,
@@ -84,6 +85,22 @@ describe("aiInterpretationResultSchema", () => {
   it("rejects an unknown item type", () => {
     const result = validResult();
     result.items[0].type = "labor";
+
+    expect(() => aiInterpretationResultSchema.parse(result)).toThrow();
+  });
+
+  it("accepts a free-text category matching a group label from the text", () => {
+    const result = validResult();
+    result.items[0].category = "Área interna";
+
+    expect(aiInterpretationResultSchema.parse(result).items[0].category).toBe(
+      "Área interna",
+    );
+  });
+
+  it("requires category to be explicit null when the text has no grouping", () => {
+    const result = validResult();
+    delete result.items[0].category;
 
     expect(() => aiInterpretationResultSchema.parse(result)).toThrow();
   });

@@ -9,6 +9,9 @@ export const quoteItemSchema = z.object({
   position: z.number().int().nonnegative(),
   type: quoteItemTypeSchema,
   description: z.string().min(1),
+  // Rótulo de agrupamento livre (ex.: "Área interna"), como o usuário ou a
+  // IA o descreveu - não é uma lista fixa de categorias.
+  category: z.string().nullable(),
   quantity: z.number().positive(),
   unit: z.string().nullable(),
   // RF-042: item pode ter preço fechado, sem valor unitário.

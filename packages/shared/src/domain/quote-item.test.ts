@@ -6,6 +6,7 @@ function validItem() {
     position: 0,
     type: "service" as const,
     description: "Pintura das paredes da sala",
+    category: null,
     quantity: 1,
     unit: "serviço",
     unit_price_cents: 280_000,
@@ -40,5 +41,10 @@ describe("quoteItemInputSchema", () => {
     expect(() =>
       quoteItemInputSchema.parse({ ...validItem(), description: "" }),
     ).toThrow();
+  });
+
+  it("accepts a free-text category", () => {
+    const item = { ...validItem(), category: "Área interna" };
+    expect(quoteItemInputSchema.parse(item).category).toBe("Área interna");
   });
 });

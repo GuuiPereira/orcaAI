@@ -139,6 +139,7 @@ create table public.quote_items (
   position integer not null,
   type text not null check (type in ('service', 'material', 'other')),
   description text not null,
+  category text,
   quantity numeric not null default 1,
   unit text,
   unit_price_cents bigint,

@@ -6,7 +6,7 @@ import { quoteItemTypeSchema } from "../domain/quote-item.ts";
 // documento sem evidência no texto original - todo campo sem evidência deve
 // ser `null`, nunca inventado.
 
-export const AI_INTERPRETATION_SCHEMA_VERSION = "1.0";
+export const AI_INTERPRETATION_SCHEMA_VERSION = "1.1";
 
 export const aiConfidenceSchema = z.enum(["high", "medium", "low"]);
 export type AiConfidence = z.infer<typeof aiConfidenceSchema>;
@@ -20,6 +20,10 @@ export const aiInterpretedCustomerSchema = z.object({
 export const aiInterpretedItemSchema = z.object({
   type: quoteItemTypeSchema,
   description: z.string().min(1),
+  // Rótulo de agrupamento tal como o texto original o nomeia (ex.: "Área
+  // interna", "Fachada"). `null` quando o texto não separa em grupos -
+  // nunca inventar uma categoria que o texto não sugeriu.
+  category: z.string().nullable(),
   quantity: z.number().positive().nullable(),
   unit: z.string().nullable(),
   unit_price_cents: z.number().int().nonnegative().nullable(),

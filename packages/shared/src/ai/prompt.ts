@@ -1,7 +1,7 @@
 import { AI_INTERPRETATION_SCHEMA_VERSION } from './interpretation.ts';
 
 // docs/ARCHITECTURE.md §5 - estratégia de prompt.
-export const AI_PROMPT_VERSION = '1.0';
+export const AI_PROMPT_VERSION = '1.1';
 
 // "A entrada deve ser limitada em tamanho e protegida contra instruções
 // presentes no texto do usuário" (docs/ARCHITECTURE.md §5).
@@ -16,6 +16,8 @@ Regras obrigatórias:
 - Diferencie o cliente (pessoa), o endereço do cliente e o local onde o serviço será executado - podem ser diferentes.
 - Reconheça valores em formatos variados: "2.800", "2800 reais" e "R$ 2.800,00" são o mesmo valor.
 - Distinga quantidade física (ex.: metros, litros) de quantidade de ambientes (ex.: "3 quartos").
+- Se o texto agrupar itens sob um rótulo (ex.: "Área interna", "Área externa", "Fachada"), preencha "category" de cada item desse grupo com esse mesmo rótulo, como o texto escreveu. Se o texto não agrupar nada, "category" é null - nunca crie uma categoria que o texto não sugeriu.
+- Descrições devem ser curtas e diretas, no estilo de um item de lista (ex.: "Pintura sala", "Pintura quartos (3)", "Lavar e pintar telhado"), não uma frase completa repetindo o trecho original. Quando a quantidade for maior que 1, inclua-a entre parênteses no final da descrição.
 - Se o texto tiver informações conflitantes, aponte o conflito em "warnings" em vez de escolher uma versão silenciosamente.
 - Gere no máximo 3 perguntas em "questions", apenas sobre informação ausente ou ambígua que impede montar o orçamento.
 - Ao corrigir problemas de escrita ou gramática nas descrições, nunca corrija ou altere o sentido comercial do que foi descrito.

@@ -96,7 +96,7 @@ Ela pode surgir depois como painel administrativo.
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "customer": {
     "name": null,
     "phone": null,
@@ -105,11 +105,12 @@ Ela pode surgir depois como painel administrativo.
   "items": [
     {
       "type": "service",
-      "description": "Pintura das paredes da sala, duas demãos",
-      "quantity": 1,
-      "unit": "serviço",
-      "unit_price_cents": null,
-      "source_excerpt": "duas demãos nas paredes da sala",
+      "description": "Pintura quartos (3)",
+      "category": "Área interna",
+      "quantity": 3,
+      "unit": "quartos",
+      "unit_price_cents": 60000,
+      "source_excerpt": "e dos 3 quartos (600 reais)",
       "confidence": "high"
     }
   ],
@@ -210,6 +211,7 @@ equipes forem adicionadas.
 - `position`;
 - `type`;
 - descrição;
+- categoria (texto livre, rótulo de agrupamento do próprio texto original);
 - quantidade decimal;
 - unidade;
 - valor unitário e total em centavos;
