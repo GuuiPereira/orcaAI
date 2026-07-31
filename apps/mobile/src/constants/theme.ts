@@ -62,4 +62,7 @@ export const Spacing = {
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
+// Height of the floating web tab bar from components/app-tabs.web.tsx (measured, it has no
+// layout size of its own since it's `position: absolute`).
+export const WebTopBarInset = 78;
 export const MaxContentWidth = 800;

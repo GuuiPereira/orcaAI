@@ -1,61 +1,87 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
+import { Alert, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Spacing, WebTopBarInset } from '@/constants/theme';
+import { useQuoteDraft } from '@/hooks/use-quote-draft';
+import { useTheme } from '@/hooks/use-theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
+function draftStatusLabel(status: ReturnType<typeof useQuoteDraft>['status']) {
+  switch (status) {
+    case 'loading':
+      return 'Carregando rascunho…';
+    case 'saving':
+      return 'Salvando…';
+    case 'saved':
+      return 'Rascunho salvo neste aparelho';
+    case 'idle':
+      return null;
   }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
 }
 
-export default function HomeScreen() {
+export default function NewQuoteScreen() {
+  const theme = useTheme();
+  const { sourceText, setSourceText, status } = useQuoteDraft();
+
+  const canContinue = useMemo(() => sourceText.trim().length > 0, [sourceText]);
+  const statusLabel = draftStatusLabel(status);
+
+  function handleContinue() {
+    // A função de interpretação por IA (interpret-quote) ainda não está conectada.
+    Alert.alert('Em breve', 'A interpretação por IA será conectada na próxima etapa.');
+  }
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
+        <ThemedView style={styles.header}>
           <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
+            Novo orçamento
+          </ThemedText>
+          <ThemedText themeColor="textSecondary">
+            Descreva o serviço como você já costuma escrever ou ditar. Depois você revisa e
+            confirma cada detalhe antes de gerar o orçamento.
           </ThemedText>
         </ThemedView>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+        <TextInput
+          value={sourceText}
+          onChangeText={setSourceText}
+          placeholder="Ex.: Pintura da casa da dona Maria, duas demãos nas paredes da sala e dos 3 quartos. Material por conta dela. Mão de obra 2800, metade na entrada..."
+          placeholderTextColor={theme.textSecondary}
+          multiline
+          textAlignVertical="top"
+          style={[
+            styles.textInput,
+            { color: theme.text, backgroundColor: theme.backgroundElement },
+          ]}
+        />
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
+        <ThemedView style={styles.footer}>
+          {statusLabel && (
+            <ThemedText type="small" themeColor="textSecondary">
+              {statusLabel}
+            </ThemedText>
+          )}
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={!canContinue}
+            onPress={handleContinue}
+            style={({ pressed }) => [
+              styles.continueButton,
+              { backgroundColor: canContinue ? theme.text : theme.backgroundSelected },
+              pressed && canContinue && styles.pressed,
+            ]}>
+            <ThemedText
+              type="smallBold"
+              style={{ color: canContinue ? theme.background : theme.textSecondary }}>
+              Continuar
+            </ThemedText>
+          </Pressable>
         </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
       </SafeAreaView>
     </ThemedView>
   );
@@ -64,35 +90,47 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
     flexDirection: 'row',
+    justifyContent: 'center',
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+    width: '100%',
     maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
     paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    paddingTop: Platform.select({
+      web: WebTopBarInset + Spacing.three,
+      default: Spacing.four,
+    }),
+    paddingBottom: BottomTabInset + Spacing.three,
+    gap: Spacing.three,
+  },
+  header: {
+    gap: Spacing.two,
   },
   title: {
-    textAlign: 'center',
+    fontSize: 32,
+    lineHeight: 40,
   },
-  code: {
-    textTransform: 'uppercase',
+  textInput: {
+    flex: 1,
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    fontSize: 16,
+    lineHeight: 24,
+    minHeight: 160,
   },
-  stepContainer: {
-    gap: Spacing.three,
+  footer: {
+    gap: Spacing.two,
+    alignItems: 'flex-end',
+  },
+  continueButton: {
     alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    alignItems: 'center',
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
+  },
+  pressed: {
+    opacity: 0.8,
   },
 });
