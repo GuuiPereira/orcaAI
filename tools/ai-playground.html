@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>OrçaAI - Playground do interpret-quote</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #111111;
+    --muted: #666666;
+    --border: #d8d8d8;
+    --panel: #f5f5f5;
+    --accent: #0a58ff;
+    --danger: #c0392b;
+    --ok: #1a7f37;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #f0f0f0;
+      --muted: #9a9a9a;
+      --border: #333640;
+      --panel: #1d2026;
+      --accent: #5b9dff;
+      --danger: #ff6b5e;
+      --ok: #4fd17a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.subtitle { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  textarea {
+    width: 100%;
+    min-height: 220px;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .config { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .config input {
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--fg);
+    font-size: 12px;
+  }
+  button {
+    margin-top: 12px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .status { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 18px; }
+  .status.error { color: var(--danger); }
+  .status.ok { color: var(--ok); }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 12px;
+    overflow: auto;
+    max-height: 70vh;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .summary { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--panel);
+    font-size: 13px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; }
+  .item { padding: 6px 0; border-top: 1px solid var(--border); }
+  .item:first-child { border-top: none; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    margin-left: 6px;
+  }
+  .questions li, .warnings li { margin: 2px 0; }
+</style>
+</head>
+<body>
+  <h1>OrçaAI — Playground do interpret-quote</h1>
+  <p class="subtitle">
+    Testa a extração de IA contra a stack local (<code>supabase start</code> +
+    <code>supabase functions serve interpret-quote --env-file ...</code>). Não é parte do
+    app, é só uma ferramenta de desenvolvimento (ver docs/AMBIENTE_LOCAL.md).
+  </p>
+
+  <div class="config">
+    <div>
+      <label for="apiUrl">API URL</label>
+      <input id="apiUrl" value="http://127.0.0.1:54321" size="28" />
+    </div>
+    <div>
+      <label for="email">Usuário de teste (do seed.sql)</label>
+      <input id="email" value="test@orcaai.local" size="20" />
+    </div>
+    <div>
+      <label for="password">Senha</label>
+      <input id="password" type="password" value="orcaai-local-test" size="16" />
+    </div>
+    <div>
+      <label for="quoteId">quote_id de teste</label>
+      <input id="quoteId" value="44444444-4444-4444-8444-444444444444" size="38" />
+    </div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <label for="sourceText">Mensagem do prestador (texto livre)</label>
+      <textarea id="sourceText">Pintura da casa da dona Maria, duas demãos nas paredes da sala e dos 3 quartos. Material por conta dela. Mão de obra 2800, metade na entrada e o restante quando terminar. Leva uns 5 dias. Validade 10 dias.</textarea>
+      <button id="runBtn">Interpretar</button>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div>
+      <label>Resultado</label>
+      <div id="summary" class="summary"></div>
+      <pre id="output">// o resultado aparece aqui</pre>
+    </div>
+  </div>
+
+  <script>
+    // Chave anon fixa de qualquer instalação local do Supabase (não é segredo).
+    const LOCAL_ANON_KEY =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $("status");
+    const outputEl = $("output");
+    const summaryEl = $("summary");
+    const runBtn = $("runBtn");
+
+    let cachedToken = null;
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = "status" + (kind ? " " + kind : "");
+    }
+
+    async function login(apiUrl, email, password) {
+      const res = await fetch(`${apiUrl}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: { apikey: LOCAL_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(`login falhou: ${json.msg || json.message || res.status}`);
+      return json.access_token;
+    }
+
+    async function updateQuoteText(apiUrl, token, quoteId, sourceText) {
+      const res = await fetch(`${apiUrl}/rest/v1/quotes?id=eq.${quoteId}`, {
+        method: "PATCH",
+        headers: {
+          apikey: LOCAL_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal",
+        },
+        body: JSON.stringify({ source_text: sourceText }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`falha ao salvar o texto no quote: ${res.status} ${text}`);
+      }
+    }
+
+    async function callInterpret(apiUrl, token, quoteId) {
+      const res = await fetch(`${apiUrl}/functions/v1/interpret-quote`, {
+        method: "POST",
+        headers: {
+          apikey: LOCAL_ANON_KEY,
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ quote_id: quoteId, force_reprocess: true }),
+      });
+      const json = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, json };
+    }
+
+    function renderSummary(result) {
+      if (!result || !result.customer) {
+        summaryEl.innerHTML = "";
+        return;
+      }
+      const itemsHtml = (result.items || [])
+        .map(
+          (item) => `
+        <div class="item">
+          <strong>${item.description}</strong>
+          <span class="badge">${item.type}</span>
+          <span class="badge">confiança: ${item.confidence}</span>
+          <div>qtd: ${item.quantity ?? "—"} ${item.unit ?? ""} · valor unit.: ${
+            item.unit_price_cents != null ? "R$ " + (item.unit_price_cents / 100).toFixed(2) : "—"
+          }</div>
+        </div>`,
+        )
+        .join("");
+
+      const questionsHtml = (result.questions || []).map((q) => `<li>${q}</li>`).join("");
+      const warningsHtml = (result.warnings || []).map((w) => `<li>${w}</li>`).join("");
+
+      summaryEl.innerHTML = `
+        <div class="card">
+          <h3>Cliente</h3>
+          nome: ${result.customer.name ?? "—"} · telefone: ${result.customer.phone ?? "—"} ·
+          endereço: ${result.customer.address ?? "—"}
+        </div>
+        <div class="card">
+          <h3>Itens</h3>
+          ${itemsHtml || "nenhum item extraído"}
+        </div>
+        <div class="card">
+          <h3>Termos comerciais</h3>
+          desconto: ${result.commercial_terms.discount ?? "—"} · pagamento: ${
+            result.commercial_terms.payment_terms ?? "—"
+          }<br />
+          prazo estimado: ${result.commercial_terms.estimated_duration_days ?? "—"} dia(s) ·
+          validade: ${result.commercial_terms.validity_days ?? "—"} dia(s)
+        </div>
+        ${
+          questionsHtml
+            ? `<div class="card"><h3>Perguntas</h3><ul class="questions">${questionsHtml}</ul></div>`
+            : ""
+        }
+        ${
+          warningsHtml
+            ? `<div class="card"><h3>Avisos</h3><ul class="warnings">${warningsHtml}</ul></div>`
+            : ""
+        }
+      `;
+    }
+
+    async function run() {
+      const apiUrl = $("apiUrl").value.trim().replace(/\/$/, "");
+      const email = $("email").value.trim();
+      const password = $("password").value;
+      const quoteId = $("quoteId").value.trim();
+      const sourceText = $("sourceText").value;
+
+      runBtn.disabled = true;
+      summaryEl.innerHTML = "";
+      outputEl.textContent = "";
+
+      try {
+        setStatus("Autenticando…");
+        if (!cachedToken) cachedToken = await login(apiUrl, email, password);
+
+        setStatus("Salvando o texto no orçamento de teste…");
+        await updateQuoteText(apiUrl, cachedToken, quoteId, sourceText);
+
+        setStatus("Chamando interpret-quote (isso liga a OpenAI de verdade)…");
+        let { ok, status, json } = await callInterpret(apiUrl, cachedToken, quoteId);
+
+        if (status === 401) {
+          // Token pode ter expirado - tenta logar de novo, uma vez.
+          cachedToken = await login(apiUrl, email, password);
+          ({ ok, status, json } = await callInterpret(apiUrl, cachedToken, quoteId));
+        }
+
+        outputEl.textContent = JSON.stringify(json, null, 2);
+
+        if (!ok) {
+          setStatus(`Erro (${status}): ${json.message || "ver JSON completo abaixo"}`, "error");
+          return;
+        }
+
+        setStatus(`OK (interpretation_id: ${json.interpretation_id})`, "ok");
+        renderSummary(json.result);
+      } catch (err) {
+        setStatus(String(err.message || err), "error");
+        outputEl.textContent = String(err.stack || err);
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    runBtn.addEventListener("click", run);
+  </script>
+</body>
+</html>
