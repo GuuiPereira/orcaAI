@@ -19,7 +19,7 @@ function validResult(): any {
         category: null,
         quantity: 1,
         unit: "serviço",
-        unit_price_cents: null,
+        total_price_cents: null,
         source_excerpt: "duas demãos nas paredes da sala",
         confidence: "high",
       },
@@ -103,5 +103,20 @@ describe("aiInterpretationResultSchema", () => {
     delete result.items[0].category;
 
     expect(() => aiInterpretationResultSchema.parse(result)).toThrow();
+  });
+
+  it("accepts an item with no quantity and no unit (both optional)", () => {
+    const result = validResult();
+    result.items[0].quantity = null;
+    result.items[0].unit = null;
+
+    expect(aiInterpretationResultSchema.parse(result)).toBeDefined();
+  });
+
+  it("keeps total_price_cents as the field name for the item's total value", () => {
+    const result = validResult();
+    result.items[0].total_price_cents = 60000;
+
+    expect(aiInterpretationResultSchema.parse(result).items[0].total_price_cents).toBe(60000);
   });
 });

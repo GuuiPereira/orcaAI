@@ -96,7 +96,7 @@ Ela pode surgir depois como painel administrativo.
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "customer": {
     "name": null,
     "phone": null,
@@ -109,7 +109,7 @@ Ela pode surgir depois como painel administrativo.
       "category": "Área interna",
       "quantity": 3,
       "unit": "quartos",
-      "unit_price_cents": 60000,
+      "total_price_cents": 60000,
       "source_excerpt": "e dos 3 quartos (600 reais)",
       "confidence": "high"
     }

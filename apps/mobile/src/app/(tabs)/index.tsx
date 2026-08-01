@@ -35,9 +35,11 @@ export default function NewQuoteScreen() {
     setIsSubmitting(true);
     try {
       const quote = await createQuoteWithText(sourceText.trim());
-      await interpretQuote(quote.id);
+      const { result } = await interpretQuote(quote.id);
       clearDraft();
-      router.push(`/quote/${quote.id}`);
+      router.push(
+        result.questions.length > 0 ? `/quote/${quote.id}/questions` : `/quote/${quote.id}`,
+      );
     } catch (error) {
       Alert.alert(
         'Não foi possível interpretar o texto',

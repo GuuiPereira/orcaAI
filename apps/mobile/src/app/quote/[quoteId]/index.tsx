@@ -1,21 +1,12 @@
 import type { AiConfidence, AiInterpretationResult } from '@orcaai/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { interpretQuote, updateQuoteSourceText } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
 import { ensureTestSession } from '@/lib/test-session';
 import { useTheme } from '@/hooks/use-theme';
@@ -30,9 +21,11 @@ type EditableItem = {
   type: 'service' | 'material' | 'other';
   description: string;
   category: string;
+  // Quantidade e unidade são só contexto - opcionais, nunca obrigatórias.
   quantity: string;
   unit: string;
-  unitPriceReais: string;
+  // Valor TOTAL do item (não é preço por unidade).
+  totalPriceReais: string;
   confidence: AiConfidence | null;
 };
 
@@ -68,7 +61,7 @@ function itemFromResult(item: AiInterpretationResult['items'][number], key: stri
     category: item.category ?? '',
     quantity: item.quantity !== null ? String(item.quantity) : '',
     unit: item.unit ?? '',
-    unitPriceReais: centsToReaisString(item.unit_price_cents),
+    totalPriceReais: centsToReaisString(item.total_price_cents),
     confidence: item.confidence,
   };
 }
@@ -80,7 +73,6 @@ export default function QuoteEditorScreen() {
   const nextKey = () => `item-${keyCounter.current++}`;
 
   const [loading, setLoading] = useState(true);
-  const [reprocessing, setReprocessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sourceText, setSourceText] = useState('');
   const [showOriginalText, setShowOriginalText] = useState(false);
@@ -92,9 +84,7 @@ export default function QuoteEditorScreen() {
     estimatedDurationDays: '',
     validityDays: '',
   });
-  const [questions, setQuestions] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [answers, setAnswers] = useState<Record<number, string>>({});
 
   function applyResult(result: AiInterpretationResult) {
     setCustomer({
@@ -114,9 +104,7 @@ export default function QuoteEditorScreen() {
           ? String(result.commercial_terms.validity_days)
           : '',
     });
-    setQuestions(result.questions);
     setWarnings(result.warnings);
-    setAnswers({});
   }
 
   useEffect(() => {
@@ -166,12 +154,10 @@ export default function QuoteEditorScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteId]);
 
+  // Soma direta: cada item já guarda o valor TOTAL dele, não um preço por
+  // unidade - não multiplica por quantidade (ver docs do prompt da IA).
   const total = useMemo(() => {
-    return items.reduce((sum, item) => {
-      const quantity = Number(item.quantity.replace(',', '.')) || 1;
-      const unitCents = reaisStringToCents(item.unitPriceReais) ?? 0;
-      return sum + quantity * unitCents;
-    }, 0);
+    return items.reduce((sum, item) => sum + (reaisStringToCents(item.totalPriceReais) ?? 0), 0);
   }, [items]);
 
   function updateItem(key: string, patch: Partial<EditableItem>) {
@@ -192,40 +178,10 @@ export default function QuoteEditorScreen() {
         category: '',
         quantity: '',
         unit: '',
-        unitPriceReais: '',
+        totalPriceReais: '',
         confidence: null,
       },
     ]);
-  }
-
-  async function handleReprocess() {
-    if (!quoteId) return;
-    const answeredQuestions = questions
-      .map((question, index) => ({ question, answer: answers[index]?.trim() }))
-      .filter((entry): entry is { question: string; answer: string } => Boolean(entry.answer));
-
-    if (answeredQuestions.length === 0) {
-      Alert.alert('Responda pelo menos uma pergunta', 'Escreva a resposta antes de reprocessar.');
-      return;
-    }
-
-    setReprocessing(true);
-    try {
-      const extra = answeredQuestions.map((a) => `- ${a.question} ${a.answer}`).join('\n');
-      const updatedSourceText = `${sourceText}\n\nInformações adicionais:\n${extra}`;
-      await updateQuoteSourceText(quoteId, updatedSourceText);
-      setSourceText(updatedSourceText);
-
-      const response = await interpretQuote(quoteId, { forceReprocess: true });
-      applyResult(response.result);
-    } catch (error) {
-      Alert.alert(
-        'Não foi possível reprocessar',
-        error instanceof Error ? error.message : String(error),
-      );
-    } finally {
-      setReprocessing(false);
-    }
   }
 
   if (loading) {
@@ -259,132 +215,96 @@ export default function QuoteEditorScreen() {
           <ThemedText type="title" style={styles.title}>
             Revisar orçamento
           </ThemedText>
-        <ThemedText themeColor="textSecondary">
-          Confira o que a IA entendeu, corrija o que precisar e responda o que estiver faltando.
-        </ThemedText>
-
-        <Pressable onPress={() => setShowOriginalText((v) => !v)}>
-          <ThemedText type="link">
-            {showOriginalText ? 'Ocultar texto original' : 'Ver texto original'}
+          <ThemedText themeColor="textSecondary">
+            Confira o que a IA entendeu e corrija o que precisar.
           </ThemedText>
-        </Pressable>
-        {showOriginalText && (
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="small">{sourceText}</ThemedText>
-          </ThemedView>
-        )}
 
-        {warnings.length > 0 && (
-          <ThemedView type="backgroundElement" style={[styles.card, styles.warningCard]}>
-            <ThemedText type="smallBold">Avisos</ThemedText>
-            {warnings.map((warning, index) => (
-              <ThemedText key={index} type="small">
-                • {warning}
-              </ThemedText>
-            ))}
-          </ThemedView>
-        )}
+          <Pressable onPress={() => setShowOriginalText((v) => !v)}>
+            <ThemedText type="link">
+              {showOriginalText ? 'Ocultar texto original' : 'Ver texto original'}
+            </ThemedText>
+          </Pressable>
+          {showOriginalText && (
+            <ThemedView type="backgroundElement" style={styles.card}>
+              <ThemedText type="small">{sourceText}</ThemedText>
+            </ThemedView>
+          )}
 
-        {questions.length > 0 && (
+          {warnings.length > 0 && (
+            <ThemedView type="backgroundElement" style={[styles.card, styles.warningCard]}>
+              <ThemedText type="smallBold">Avisos</ThemedText>
+              {warnings.map((warning, index) => (
+                <ThemedText key={index} type="small">
+                  • {warning}
+                </ThemedText>
+              ))}
+            </ThemedView>
+          )}
+
           <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Perguntas da IA</ThemedText>
-            {questions.map((question, index) => (
-              <View key={index} style={styles.questionRow}>
-                <ThemedText type="small">{question}</ThemedText>
-                <TextInput
-                  value={answers[index] ?? ''}
-                  onChangeText={(text) => setAnswers((current) => ({ ...current, [index]: text }))}
-                  placeholder="Sua resposta"
-                  placeholderTextColor={theme.textSecondary}
-                  style={[styles.input, { color: theme.text, backgroundColor: theme.background }]}
-                />
-              </View>
-            ))}
-            <Pressable
-              accessibilityRole="button"
-              disabled={reprocessing}
-              onPress={handleReprocess}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                { borderColor: theme.text },
-                pressed && styles.pressed,
-              ]}>
-              {reprocessing ? (
-                <ActivityIndicator color={theme.text} />
-              ) : (
-                <ThemedText type="smallBold">Responder e reprocessar</ThemedText>
-              )}
+            <ThemedText type="smallBold">Cliente</ThemedText>
+            <LabeledInput
+              label="Nome"
+              value={customer.name}
+              onChangeText={(name) => setCustomer((c) => ({ ...c, name }))}
+              uncertain={!customer.name}
+            />
+            <LabeledInput
+              label="Telefone"
+              value={customer.phone}
+              onChangeText={(phone) => setCustomer((c) => ({ ...c, phone }))}
+              uncertain={!customer.phone}
+            />
+            <LabeledInput
+              label="Endereço"
+              value={customer.address}
+              onChangeText={(address) => setCustomer((c) => ({ ...c, address }))}
+              uncertain={!customer.address}
+            />
+          </ThemedView>
+
+          <ThemedView style={styles.itemsHeader}>
+            <ThemedText type="smallBold">Itens</ThemedText>
+            <Pressable onPress={addItem}>
+              <ThemedText type="link">+ adicionar item</ThemedText>
             </Pressable>
           </ThemedView>
-        )}
 
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="smallBold">Cliente</ThemedText>
-          <LabeledInput
-            label="Nome"
-            value={customer.name}
-            onChangeText={(name) => setCustomer((c) => ({ ...c, name }))}
-            uncertain={!customer.name}
-          />
-          <LabeledInput
-            label="Telefone"
-            value={customer.phone}
-            onChangeText={(phone) => setCustomer((c) => ({ ...c, phone }))}
-            uncertain={!customer.phone}
-          />
-          <LabeledInput
-            label="Endereço"
-            value={customer.address}
-            onChangeText={(address) => setCustomer((c) => ({ ...c, address }))}
-            uncertain={!customer.address}
-          />
-        </ThemedView>
+          {items.map((item) => (
+            <ItemCard key={item.key} item={item} onChange={updateItem} onRemove={removeItem} />
+          ))}
 
-        <ThemedView style={styles.itemsHeader}>
-          <ThemedText type="smallBold">Itens</ThemedText>
-          <Pressable onPress={addItem}>
-            <ThemedText type="link">+ adicionar item</ThemedText>
-          </Pressable>
-        </ThemedView>
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">Condições comerciais</ThemedText>
+            <LabeledInput
+              label="Forma de pagamento"
+              value={commercialTerms.paymentTerms}
+              onChangeText={(paymentTerms) => setCommercialTerms((c) => ({ ...c, paymentTerms }))}
+            />
+            <LabeledInput
+              label="Prazo estimado (dias)"
+              value={commercialTerms.estimatedDurationDays}
+              onChangeText={(estimatedDurationDays) =>
+                setCommercialTerms((c) => ({ ...c, estimatedDurationDays }))
+              }
+              keyboardType="numeric"
+            />
+            <LabeledInput
+              label="Validade (dias)"
+              value={commercialTerms.validityDays}
+              onChangeText={(validityDays) => setCommercialTerms((c) => ({ ...c, validityDays }))}
+              keyboardType="numeric"
+            />
+          </ThemedView>
 
-        {items.map((item) => (
-          <ItemCard key={item.key} item={item} onChange={updateItem} onRemove={removeItem} />
-        ))}
-
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="smallBold">Condições comerciais</ThemedText>
-          <LabeledInput
-            label="Forma de pagamento"
-            value={commercialTerms.paymentTerms}
-            onChangeText={(paymentTerms) => setCommercialTerms((c) => ({ ...c, paymentTerms }))}
-            uncertain={!commercialTerms.paymentTerms}
-          />
-          <LabeledInput
-            label="Prazo estimado (dias)"
-            value={commercialTerms.estimatedDurationDays}
-            onChangeText={(estimatedDurationDays) =>
-              setCommercialTerms((c) => ({ ...c, estimatedDurationDays }))
-            }
-            keyboardType="numeric"
-            uncertain={!commercialTerms.estimatedDurationDays}
-          />
-          <LabeledInput
-            label="Validade (dias)"
-            value={commercialTerms.validityDays}
-            onChangeText={(validityDays) => setCommercialTerms((c) => ({ ...c, validityDays }))}
-            keyboardType="numeric"
-            uncertain={!commercialTerms.validityDays}
-          />
-        </ThemedView>
-
-        <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="smallBold">
-            Total estimado: R$ {(total / 100).toFixed(2).replace('.', ',')}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Cálculo final com desconto e validação vem na próxima etapa.
-          </ThemedText>
-        </ThemedView>
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">
+              Total estimado: R$ {(total / 100).toFixed(2).replace('.', ',')}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Cálculo final com desconto e validação vem na próxima etapa.
+            </ThemedText>
+          </ThemedView>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
@@ -487,7 +407,6 @@ function ItemCard({
             value={item.quantity}
             onChangeText={(quantity) => onChange(item.key, { quantity })}
             keyboardType="numeric"
-            uncertain={!item.quantity}
           />
         </View>
         <View style={styles.itemNumberField}>
@@ -495,16 +414,15 @@ function ItemCard({
             label="Unidade"
             value={item.unit}
             onChangeText={(unit) => onChange(item.key, { unit })}
-            uncertain={!item.unit}
           />
         </View>
         <View style={styles.itemNumberField}>
           <LabeledInput
-            label="Valor unitário (R$)"
-            value={item.unitPriceReais}
-            onChangeText={(unitPriceReais) => onChange(item.key, { unitPriceReais })}
+            label="Valor (R$)"
+            value={item.totalPriceReais}
+            onChangeText={(totalPriceReais) => onChange(item.key, { totalPriceReais })}
             keyboardType="numeric"
-            uncertain={!item.unitPriceReais}
+            uncertain={!item.totalPriceReais}
           />
         </View>
       </View>
@@ -556,9 +474,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: UNCERTAIN_ACCENT,
   },
-  questionRow: {
-    gap: Spacing.one,
-  },
   fieldRow: {
     gap: Spacing.half,
   },
@@ -599,16 +514,5 @@ const styles = StyleSheet.create({
   },
   itemNumberField: {
     flex: 1,
-  },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    marginTop: Spacing.one,
-  },
-  pressed: {
-    opacity: 0.8,
   },
 });

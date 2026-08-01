@@ -49,7 +49,7 @@ function deriveUncertainFields(result: AiInterpretationResult): string[] {
   if (!result.customer.address) fields.push("customer.address");
   result.items.forEach((item, index) => {
     if (item.confidence !== "high") fields.push(`items[${index}]`);
-    if (item.unit_price_cents === null) fields.push(`items[${index}].unit_price_cents`);
+    if (item.total_price_cents === null) fields.push(`items[${index}].total_price_cents`);
   });
   return fields;
 }

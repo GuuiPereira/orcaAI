@@ -46,6 +46,17 @@ describe('buildInterpretationPrompt', () => {
     expect(system).toMatch(/nunca corrija ou altere o sentido comercial/i);
   });
 
+  it('instructs the model that quantity/unit are optional, never assumed', () => {
+    const { system } = buildInterpretationPrompt('texto qualquer');
+    expect(system).toMatch(/quantidade e unidade são opcionais/i);
+    expect(system).toMatch(/não assuma 1 nem invente uma unidade/i);
+  });
+
+  it('instructs the model that total_price_cents is always the total, not a per-unit price', () => {
+    const { system } = buildInterpretationPrompt('texto qualquer');
+    expect(system).toMatch(/total_price_cents.*sempre o valor total/i);
+  });
+
   it('truncates source text beyond the length cap', () => {
     const longText = 'a'.repeat(5000);
     const { user, truncated } = buildInterpretationPrompt(longText);

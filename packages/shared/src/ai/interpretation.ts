@@ -6,7 +6,7 @@ import { quoteItemTypeSchema } from "../domain/quote-item.ts";
 // documento sem evidência no texto original - todo campo sem evidência deve
 // ser `null`, nunca inventado.
 
-export const AI_INTERPRETATION_SCHEMA_VERSION = "1.1";
+export const AI_INTERPRETATION_SCHEMA_VERSION = "1.2";
 
 export const aiConfidenceSchema = z.enum(["high", "medium", "low"]);
 export type AiConfidence = z.infer<typeof aiConfidenceSchema>;
@@ -24,9 +24,13 @@ export const aiInterpretedItemSchema = z.object({
   // interna", "Fachada"). `null` quando o texto não separa em grupos -
   // nunca inventar uma categoria que o texto não sugeriu.
   category: z.string().nullable(),
+  // Opcionais: nem todo item tem quantidade/unidade explícitas no texto.
   quantity: z.number().positive().nullable(),
   unit: z.string().nullable(),
-  unit_price_cents: z.number().int().nonnegative().nullable(),
+  // Valor TOTAL deste item (não é preço por unidade). Ex.: "3 quartos, 600
+  // reais" -> total_price_cents = 60000, quantity = 3 - os 600 reais não são
+  // por quarto.
+  total_price_cents: z.number().int().nonnegative().nullable(),
   // Trecho do texto original que sustenta este item, para auditoria (RF-024).
   source_excerpt: z.string().min(1),
   confidence: aiConfidenceSchema,

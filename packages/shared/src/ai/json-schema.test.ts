@@ -48,7 +48,7 @@ describe('AI_INTERPRETATION_JSON_SCHEMA', () => {
 
   it('preserves the enum/const constraints that OpenAI strict mode does support', () => {
     const json = JSON.stringify(AI_INTERPRETATION_JSON_SCHEMA);
-    expect(json).toContain('"const":"1.1"');
+    expect(json).toContain('"const":"1.2"');
     expect(json).toContain('"enum":["service","material","other"]');
     expect(json).toContain('"enum":["high","medium","low"]');
   });
