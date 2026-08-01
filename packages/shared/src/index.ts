@@ -10,3 +10,4 @@ export * from "./domain/customer.ts";
 export * from "./domain/discount.ts";
 export * from "./domain/quote.ts";
 export * from "./domain/quote-item.ts";
+export * from "./pdf/quote-html.ts";

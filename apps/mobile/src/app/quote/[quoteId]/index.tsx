@@ -1,15 +1,23 @@
-import type { AiConfidence, AiInterpretationResult, Discount, QuoteItemType } from '@orcaai/shared';
-import { calculateQuoteTotals, centsToReaisInput, formatCentsAsBRL, parseReaisInputToCents } from '@orcaai/shared';
+import type { AiConfidence, AiInterpretationResult, Discount, PdfItem, QuoteItemType } from '@orcaai/shared';
+import {
+  buildQuoteHtml,
+  calculateQuoteTotals,
+  centsToReaisInput,
+  formatCentsAsBRL,
+  parseReaisInputToCents,
+} from '@orcaai/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PdfPreview } from '@/components/pdf-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { shareQuotePdf } from '@/lib/pdf-share';
 import { supabase } from '@/lib/supabase';
-import { ensureTestSession } from '@/lib/test-session';
+import { ensureTestSession, getTestOrganization, type TestOrganization } from '@/lib/test-session';
 import { useTheme } from '@/hooks/use-theme';
 
 // Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
@@ -36,6 +44,17 @@ const DISCOUNT_KIND_OPTIONS: { value: DiscountKind; label: string }[] = [
   { value: 'none', label: 'Nenhum' },
   { value: 'fixed', label: 'Valor fixo' },
   { value: 'percentage', label: 'Percentual' },
+];
+
+// Modo de geração do PDF (decisão de 2026-08-01,
+// .tasks/fase-1-prova-do-nucleo.md item 6).
+type PdfGenerationMode = 'completo' | 'separado' | 'service' | 'material';
+
+const PDF_MODE_OPTIONS: { value: PdfGenerationMode; label: string }[] = [
+  { value: 'completo', label: 'Completo' },
+  { value: 'separado', label: 'Separado' },
+  { value: 'service', label: 'Só serviço' },
+  { value: 'material', label: 'Só material' },
 ];
 
 type EditableItem = {
@@ -106,6 +125,10 @@ export default function QuoteEditorScreen() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
+  const [organization, setOrganization] = useState<TestOrganization | null>(null);
+  const [pdfMode, setPdfMode] = useState<PdfGenerationMode>('completo');
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   function applyResult(result: AiInterpretationResult) {
     setCustomer({
@@ -137,6 +160,15 @@ export default function QuoteEditorScreen() {
       setErrorMessage(null);
       try {
         await ensureTestSession();
+        getTestOrganization()
+          .then((org) => {
+            if (!cancelled) setOrganization(org);
+          })
+          .catch(() => {
+            // Falha ao buscar dados do prestador não deve travar o editor -
+            // só desabilita a geração do PDF até resolver.
+          });
+
         const { data: quote, error: quoteError } = await supabase
           .from('quotes')
           .select('source_text')
@@ -225,6 +257,81 @@ export default function QuoteEditorScreen() {
         confidence: null,
       },
     ]);
+  }
+
+  function toPdfItems(): PdfItem[] {
+    return items.map((item) => ({
+      type: item.type,
+      description: item.description,
+      category: item.category || null,
+      quantity: item.quantity || null,
+      unit: item.unit || null,
+      total_price_cents: safeItemCents(item.totalPriceReais),
+    }));
+  }
+
+  function buildHtmlFor(mode: 'completo' | 'service' | 'material'): string | null {
+    if (!organization) return null;
+    return buildQuoteHtml({
+      mode,
+      organization,
+      customer: {
+        name: customer.name || null,
+        phone: customer.phone || null,
+        address: customer.address || null,
+      },
+      items: toPdfItems(),
+      discount,
+      commercialTerms: {
+        paymentTerms: commercialTerms.paymentTerms || null,
+        estimatedDurationDays: commercialTerms.estimatedDurationDays
+          ? Number(commercialTerms.estimatedDurationDays)
+          : null,
+        validityDays: commercialTerms.validityDays ? Number(commercialTerms.validityDays) : null,
+      },
+      issuedAt: new Date(),
+    });
+  }
+
+  async function handleGeneratePress() {
+    if (!organization) {
+      Alert.alert('Aguarde', 'Ainda carregando os dados do prestador.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (pdfMode === 'separado') {
+        const serviceHtml = buildHtmlFor('service');
+        const materialHtml = buildHtmlFor('material');
+        if (serviceHtml) await shareQuotePdf(serviceHtml);
+        if (materialHtml) await shareQuotePdf(materialHtml);
+        return;
+      }
+      const html = buildHtmlFor(pdfMode);
+      if (html) setPreviewHtml(html);
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível gerar o PDF',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setGeneratingPdf(false);
+    }
+  }
+
+  async function handleShareFromPreview() {
+    if (!previewHtml) return;
+    setGeneratingPdf(true);
+    try {
+      await shareQuotePdf(previewHtml);
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível compartilhar',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setGeneratingPdf(false);
+    }
   }
 
   if (loading) {
@@ -362,8 +469,77 @@ export default function QuoteEditorScreen() {
             )}
             <ThemedText type="smallBold">Total: {formatCentsAsBRL(totals.totalCents)}</ThemedText>
           </ThemedView>
+
+          <ThemedView type="backgroundElement" style={styles.card}>
+            <ThemedText type="smallBold">Gerar orçamento</ThemedText>
+            <View style={styles.typeToggle}>
+              {PDF_MODE_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  onPress={() => setPdfMode(option.value)}
+                  style={[
+                    styles.typeOption,
+                    {
+                      backgroundColor: pdfMode === option.value ? theme.text : 'transparent',
+                      borderColor: theme.textSecondary,
+                    },
+                  ]}>
+                  <ThemedText
+                    type="small"
+                    style={{ color: pdfMode === option.value ? theme.background : theme.textSecondary }}>
+                    {option.label}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              disabled={generatingPdf || !organization}
+              onPress={handleGeneratePress}
+              style={({ pressed }) => [
+                styles.generateButton,
+                { backgroundColor: theme.text },
+                pressed && styles.pressed,
+              ]}>
+              {generatingPdf ? (
+                <ActivityIndicator color={theme.background} />
+              ) : (
+                <ThemedText type="smallBold" style={{ color: theme.background }}>
+                  {pdfMode === 'separado' ? 'Gerar e compartilhar (2 PDFs)' : 'Ver prévia do PDF'}
+                </ThemedText>
+              )}
+            </Pressable>
+          </ThemedView>
         </ScrollView>
       </SafeAreaView>
+
+      <Modal
+        visible={previewHtml !== null}
+        animationType="slide"
+        onRequestClose={() => setPreviewHtml(null)}>
+        <SafeAreaView style={styles.previewContainer}>
+          {previewHtml && <PdfPreview html={previewHtml} />}
+          <View style={styles.previewActions}>
+            <Pressable
+              onPress={() => setPreviewHtml(null)}
+              style={[styles.previewSecondaryButton, { borderColor: theme.text }]}>
+              <ThemedText type="smallBold">Fechar</ThemedText>
+            </Pressable>
+            <Pressable
+              disabled={generatingPdf}
+              onPress={handleShareFromPreview}
+              style={[styles.previewPrimaryButton, { backgroundColor: theme.text }]}>
+              {generatingPdf ? (
+                <ActivityIndicator color={theme.background} />
+              ) : (
+                <ThemedText type="smallBold" style={{ color: theme.background }}>
+                  Compartilhar PDF
+                </ThemedText>
+              )}
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </ThemedView>
   );
 }
@@ -660,5 +836,34 @@ const styles = StyleSheet.create({
   },
   itemNumberField: {
     flex: 1,
+  },
+  generateButton: {
+    alignItems: 'center',
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
+  },
+  pressed: {
+    opacity: 0.8,
+  },
+  previewContainer: {
+    flex: 1,
+  },
+  previewActions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    padding: Spacing.three,
+  },
+  previewSecondaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
+  },
+  previewPrimaryButton: {
+    flex: 2,
+    alignItems: 'center',
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
   },
 });
