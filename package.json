@@ -9,9 +9,12 @@
     "mobile": "pnpm --filter @orcaai/mobile",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "dev": "pnpm exec supabase start && concurrently -n functions,expo -c yellow,cyan \"pnpm exec supabase functions serve interpret-quote --env-file supabase/functions/interpret-quote/.env.local\" \"pnpm --filter @orcaai/mobile web\"",
+    "dev:stop": "pnpm exec supabase stop"
   },
   "devDependencies": {
+    "concurrently": "^10.0.4",
     "supabase": "^2.110.0"
   }
 }
