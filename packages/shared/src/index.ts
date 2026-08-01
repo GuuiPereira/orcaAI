@@ -1,5 +1,6 @@
 export * from "./ai/interpretation.ts";
 export * from "./ai/json-schema.ts";
+export * from "./ai/model-pricing.ts";
 export * from "./ai/prompt.ts";
 export * from "./domain/address.ts";
 export * from "./domain/commercial-terms.ts";

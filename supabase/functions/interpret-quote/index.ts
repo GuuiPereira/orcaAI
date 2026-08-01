@@ -7,7 +7,10 @@ import {
   AI_PROMPT_VERSION,
   aiInterpretationResultSchema,
   buildInterpretationPrompt,
+  estimateCostCents,
+  findModelPricing,
   type AiInterpretationResult,
+  type ResponsesApiUsage,
 } from "../../../packages/shared/src/index.ts";
 
 // docs/ARCHITECTURE.md §4 - fluxo de interpretação, passos 2-7.
@@ -15,13 +18,17 @@ import {
 const requestSchema = z.object({
   quote_id: z.uuid(),
   force_reprocess: z.boolean().optional(),
+  // Só pra facilitar comparar modelos em desenvolvimento (ver
+  // tools/ai-playground.html) - precisa estar na tabela de preços em
+  // packages/shared/src/ai/model-pricing.ts, não aceita qualquer string.
+  model: z.string().optional(),
 });
 
 type OpenAiResponsesResult = {
   output?: Array<{
     content?: Array<{ type?: string; text?: string }>;
   }>;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: ResponsesApiUsage;
 };
 
 function extractOutputText(payload: OpenAiResponsesResult): string | null {
@@ -47,22 +54,6 @@ function deriveUncertainFields(result: AiInterpretationResult): string[] {
   return fields;
 }
 
-// Melhor esforço: só calcula se o preço por token estiver configurado via
-// env. Sem isso, fica null em vez de inventar um custo.
-function estimateCostCents(usage: OpenAiResponsesResult["usage"]): number | null {
-  if (!usage) return null;
-  const inputCostPerMillion = Number(Deno.env.get("OPENAI_INPUT_COST_CENTS_PER_1M"));
-  const outputCostPerMillion = Number(Deno.env.get("OPENAI_OUTPUT_COST_CENTS_PER_1M"));
-  if (!Number.isFinite(inputCostPerMillion) || !Number.isFinite(outputCostPerMillion)) {
-    return null;
-  }
-  const inputTokens = usage.input_tokens ?? 0;
-  const outputTokens = usage.output_tokens ?? 0;
-  const costCents =
-    (inputTokens * inputCostPerMillion + outputTokens * outputCostPerMillion) / 1_000_000;
-  return Math.round(costCents);
-}
-
 export default {
   fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
     if (req.method !== "POST") {
@@ -76,7 +67,15 @@ export default {
         { status: 400 },
       );
     }
-    const { quote_id: quoteId, force_reprocess: forceReprocess = false } = parsedBody.data;
+    const { quote_id: quoteId, force_reprocess: forceReprocess = false, model: requestedModel } =
+      parsedBody.data;
+
+    if (requestedModel && !findModelPricing(requestedModel)) {
+      return Response.json(
+        { message: `unknown model "${requestedModel}" - not in the pricing catalog` },
+        { status: 400 },
+      );
+    }
 
     // RLS em `quotes` já garante que só um membro da organização dona do
     // orçamento consegue ler esta linha (docs/ARCHITECTURE.md §4, passo 3).
@@ -114,7 +113,7 @@ export default {
     }
 
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
-    const openAiModel = Deno.env.get("OPENAI_MODEL");
+    const openAiModel = requestedModel ?? Deno.env.get("OPENAI_MODEL");
     if (!openAiApiKey || !openAiModel) {
       return Response.json({ message: "AI provider not configured" }, { status: 500 });
     }
@@ -198,7 +197,7 @@ export default {
         result,
         uncertain_fields: deriveUncertainFields(result),
         usage: openAiPayload.usage ?? null,
-        estimated_cost_cents: estimateCostCents(openAiPayload.usage),
+        estimated_cost_cents: estimateCostCents(openAiModel, openAiPayload.usage),
       })
       .eq("id", interpretation.id);
 

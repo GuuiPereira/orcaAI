@@ -54,7 +54,8 @@
     resize: vertical;
   }
   .config { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-  .config input {
+  .config input,
+  .config select {
     padding: 6px 8px;
     border-radius: 6px;
     border: 1px solid var(--border);
@@ -135,6 +136,12 @@
       <label for="quoteId">quote_id de teste</label>
       <input id="quoteId" value="44444444-4444-4444-8444-444444444444" size="38" />
     </div>
+    <div>
+      <label for="model">Modelo (opcional)</label>
+      <select id="model">
+        <option value="">padrão do .env.local</option>
+      </select>
+    </div>
   </div>
 
   <div class="layout">
@@ -156,6 +163,21 @@
     // Chave anon fixa de qualquer instalação local do Supabase (não é segredo).
     const LOCAL_ANON_KEY =
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0";
+
+    // Espelho de packages/shared/src/ai/model-pricing.ts (esta página é um
+    // HTML estático sem build, então não dá pra importar de lá direto).
+    // Atualize os dois arquivos juntos quando os preços da OpenAI mudarem.
+    const MODEL_PRICING = [
+      { id: "gpt-5.6-sol", input: 5.0, cachedInput: 0.5, output: 30.0 },
+      { id: "gpt-5.6-terra", input: 2.0, cachedInput: 0.2, output: 12.0 },
+      { id: "gpt-5.6-luna", input: 0.2, cachedInput: 0.02, output: 1.2 },
+      { id: "gpt-5.5", input: 5.0, cachedInput: 0.5, output: 30.0 },
+      { id: "gpt-5.5-pro", input: 30.0, cachedInput: null, output: 180.0 },
+      { id: "gpt-5.4", input: 2.5, cachedInput: 0.25, output: 15.0 },
+      { id: "gpt-5.4-mini", input: 0.75, cachedInput: 0.075, output: 4.5 },
+      { id: "gpt-5.4-nano", input: 0.2, cachedInput: 0.02, output: 1.25 },
+      { id: "gpt-5.4-pro", input: 30.0, cachedInput: null, output: 180.0 },
+    ];
 
     const $ = (id) => document.getElementById(id);
     const statusEl = $("status");
@@ -198,7 +220,10 @@
       }
     }
 
-    async function callInterpret(apiUrl, token, quoteId) {
+    async function callInterpret(apiUrl, token, quoteId, model) {
+      const body = { quote_id: quoteId, force_reprocess: true };
+      if (model) body.model = model;
+
       const res = await fetch(`${apiUrl}/functions/v1/interpret-quote`, {
         method: "POST",
         headers: {
@@ -206,7 +231,7 @@
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ quote_id: quoteId, force_reprocess: true }),
+        body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
       return { ok: res.ok, status: res.status, json };
@@ -271,6 +296,7 @@
       const password = $("password").value;
       const quoteId = $("quoteId").value.trim();
       const sourceText = $("sourceText").value;
+      const model = $("model").value;
 
       runBtn.disabled = true;
       summaryEl.innerHTML = "";
@@ -283,13 +309,15 @@
         setStatus("Salvando o texto no orçamento de teste…");
         await updateQuoteText(apiUrl, cachedToken, quoteId, sourceText);
 
-        setStatus("Chamando interpret-quote (isso liga a OpenAI de verdade)…");
-        let { ok, status, json } = await callInterpret(apiUrl, cachedToken, quoteId);
+        setStatus(
+          `Chamando interpret-quote${model ? ` (modelo: ${model})` : ""} (isso liga a OpenAI de verdade)…`,
+        );
+        let { ok, status, json } = await callInterpret(apiUrl, cachedToken, quoteId, model);
 
         if (status === 401) {
           // Token pode ter expirado - tenta logar de novo, uma vez.
           cachedToken = await login(apiUrl, email, password);
-          ({ ok, status, json } = await callInterpret(apiUrl, cachedToken, quoteId));
+          ({ ok, status, json } = await callInterpret(apiUrl, cachedToken, quoteId, model));
         }
 
         outputEl.textContent = JSON.stringify(json, null, 2);
@@ -309,6 +337,17 @@
       }
     }
 
+    function populateModelSelect() {
+      const select = $("model");
+      for (const m of MODEL_PRICING) {
+        const option = document.createElement("option");
+        option.value = m.id;
+        option.textContent = `${m.id} ($${m.input.toFixed(2)} in / $${m.output.toFixed(2)} out por 1M)`;
+        select.appendChild(option);
+      }
+    }
+
+    populateModelSelect();
     runBtn.addEventListener("click", run);
   </script>
 </body>
