@@ -40,6 +40,12 @@ describe('buildInterpretationPrompt', () => {
     expect(system).toMatch(/curtas e diretas/i);
   });
 
+  it('instructs the model to fix spelling/accents in descriptions and categories without changing meaning', () => {
+    const { system } = buildInterpretationPrompt('texto qualquer');
+    expect(system).toMatch(/corrija erros óbvios de ortografia e acentuação/i);
+    expect(system).toMatch(/nunca corrija ou altere o sentido comercial/i);
+  });
+
   it('truncates source text beyond the length cap', () => {
     const longText = 'a'.repeat(5000);
     const { user, truncated } = buildInterpretationPrompt(longText);
