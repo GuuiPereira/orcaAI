@@ -9,7 +9,6 @@ function validItem() {
     category: null,
     quantity: 1,
     unit: "serviço",
-    unit_price_cents: 280_000,
     total_price_cents: 280_000,
     notes: null,
   };
@@ -20,9 +19,14 @@ describe("quoteItemInputSchema", () => {
     expect(quoteItemInputSchema.parse(validItem())).toBeDefined();
   });
 
-  it("accepts a closed-price item without a unit price (RF-042)", () => {
-    const item = { ...validItem(), unit_price_cents: null };
-    expect(quoteItemInputSchema.parse(item).unit_price_cents).toBeNull();
+  it("accepts a null quantity (optional - not every item has one)", () => {
+    const item = { ...validItem(), quantity: null };
+    expect(quoteItemInputSchema.parse(item).quantity).toBeNull();
+  });
+
+  it("accepts a null total_price_cents (not priced yet)", () => {
+    const item = { ...validItem(), total_price_cents: null };
+    expect(quoteItemInputSchema.parse(item).total_price_cents).toBeNull();
   });
 
   it("rejects an unknown item type", () => {
@@ -34,6 +38,12 @@ describe("quoteItemInputSchema", () => {
   it("rejects a zero or negative quantity", () => {
     expect(() =>
       quoteItemInputSchema.parse({ ...validItem(), quantity: 0 }),
+    ).toThrow();
+  });
+
+  it("rejects a negative total_price_cents", () => {
+    expect(() =>
+      quoteItemInputSchema.parse({ ...validItem(), total_price_cents: -1 }),
     ).toThrow();
   });
 

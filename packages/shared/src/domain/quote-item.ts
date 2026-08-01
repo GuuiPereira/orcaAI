@@ -12,10 +12,11 @@ export const quoteItemSchema = z.object({
   // Rótulo de agrupamento livre (ex.: "Área interna"), como o usuário ou a
   // IA o descreveu - não é uma lista fixa de categorias.
   category: z.string().nullable(),
-  quantity: z.number().positive(),
+  // Opcionais: nem todo item tem quantidade/unidade explícitas no texto.
+  quantity: z.number().positive().nullable(),
   unit: z.string().nullable(),
-  // RF-042: item pode ter preço fechado, sem valor unitário.
-  unit_price_cents: z.number().int().nonnegative().nullable(),
+  // Valor TOTAL do item, nunca um preço por unidade (decisão de
+  // 2026-08-01 - ver .tasks/fase-1-prova-do-nucleo.md).
   total_price_cents: z.number().int().nonnegative().nullable(),
   notes: z.string().nullable(),
 });

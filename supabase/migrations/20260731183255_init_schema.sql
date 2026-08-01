@@ -140,9 +140,12 @@ create table public.quote_items (
   type text not null check (type in ('service', 'material', 'other')),
   description text not null,
   category text,
-  quantity numeric not null default 1,
+  -- Opcional: nem todo item tem quantidade/unidade explícitas (ver
+  -- packages/shared/src/ai/interpretation.ts).
+  quantity numeric,
   unit text,
-  unit_price_cents bigint,
+  -- Valor TOTAL do item, nunca por unidade (decisão de 2026-08-01 - ver
+  -- .tasks/fase-1-prova-do-nucleo.md).
   total_price_cents bigint,
   notes text
 );

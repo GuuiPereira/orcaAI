@@ -1,4 +1,5 @@
-import type { AiConfidence, AiInterpretationResult } from '@orcaai/shared';
+import type { AiConfidence, AiInterpretationResult, Discount, QuoteItemType } from '@orcaai/shared';
+import { calculateQuoteTotals, centsToReaisInput, formatCentsAsBRL, parseReaisInputToCents } from '@orcaai/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -11,14 +12,35 @@ import { supabase } from '@/lib/supabase';
 import { ensureTestSession } from '@/lib/test-session';
 import { useTheme } from '@/hooks/use-theme';
 
-// Cor de destaque para campos incertos/ausentes (RF-024, RF-025). Não faz
-// parte da paleta base do app - é um acento semântico, funciona em claro e
-// escuro por ser usada só como borda/ícone, nunca como fundo cheio.
+// Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
+// erros de validação (RF-049). Não faz parte da paleta base do app - são
+// acentos semânticos, usados só em borda/texto, nunca como fundo cheio.
 const UNCERTAIN_ACCENT = '#eab308';
+const ERROR_ACCENT = '#dc2626';
+
+const ITEM_TYPE_LABELS: Record<QuoteItemType, string> = {
+  service: 'serviço',
+  material: 'material',
+  other: 'outro',
+};
+
+const SUBTOTAL_TYPE_LABELS: Record<QuoteItemType, string> = {
+  service: 'Serviços',
+  material: 'Materiais',
+  other: 'Outros',
+};
+
+type DiscountKind = 'none' | 'fixed' | 'percentage';
+
+const DISCOUNT_KIND_OPTIONS: { value: DiscountKind; label: string }[] = [
+  { value: 'none', label: 'Nenhum' },
+  { value: 'fixed', label: 'Valor fixo' },
+  { value: 'percentage', label: 'Percentual' },
+];
 
 type EditableItem = {
   key: string;
-  type: 'service' | 'material' | 'other';
+  type: QuoteItemType;
   description: string;
   category: string;
   // Quantidade e unidade são só contexto - opcionais, nunca obrigatórias.
@@ -41,18 +63,6 @@ type EditableCommercialTerms = {
   validityDays: string;
 };
 
-function centsToReaisString(cents: number | null): string {
-  if (cents === null) return '';
-  return (cents / 100).toFixed(2).replace('.', ',');
-}
-
-function reaisStringToCents(value: string): number | null {
-  const normalized = value.trim().replace(/\./g, '').replace(',', '.');
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? Math.round(parsed * 100) : null;
-}
-
 function itemFromResult(item: AiInterpretationResult['items'][number], key: string): EditableItem {
   return {
     key,
@@ -61,9 +71,18 @@ function itemFromResult(item: AiInterpretationResult['items'][number], key: stri
     category: item.category ?? '',
     quantity: item.quantity !== null ? String(item.quantity) : '',
     unit: item.unit ?? '',
-    totalPriceReais: centsToReaisString(item.total_price_cents),
+    totalPriceReais: centsToReaisInput(item.total_price_cents),
     confidence: item.confidence,
   };
+}
+
+// RF-049: nunca deixa um valor digitado negativo estragar o cálculo -
+// contribui 0 pro total, mas o campo continua marcado com erro (ver
+// hasNegativeValue no ItemCard).
+function safeItemCents(raw: string): number | null {
+  const cents = parseReaisInputToCents(raw);
+  if (cents === null) return null;
+  return cents < 0 ? 0 : cents;
 }
 
 export default function QuoteEditorScreen() {
@@ -85,6 +104,8 @@ export default function QuoteEditorScreen() {
     validityDays: '',
   });
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
+  const [discountValue, setDiscountValue] = useState('');
 
   function applyResult(result: AiInterpretationResult) {
     setCustomer({
@@ -154,11 +175,33 @@ export default function QuoteEditorScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteId]);
 
-  // Soma direta: cada item já guarda o valor TOTAL dele, não um preço por
-  // unidade - não multiplica por quantidade (ver docs do prompt da IA).
-  const total = useMemo(() => {
-    return items.reduce((sum, item) => sum + (reaisStringToCents(item.totalPriceReais) ?? 0), 0);
-  }, [items]);
+  // RF-049: percentual fora de 0-100 (ou texto inválido) não vira desconto -
+  // fica sem aplicar até o usuário corrigir, em vez de quebrar o cálculo.
+  const discount: Discount | null = useMemo(() => {
+    if (discountKind === 'fixed') {
+      const cents = parseReaisInputToCents(discountValue);
+      return cents !== null && cents >= 0 ? { type: 'fixed', value_cents: cents } : null;
+    }
+    if (discountKind === 'percentage') {
+      const percent = Number(discountValue.trim().replace(',', '.'));
+      return Number.isFinite(percent) && percent >= 0 && percent <= 100
+        ? { type: 'percentage', value_percent: percent }
+        : null;
+    }
+    return null;
+  }, [discountKind, discountValue]);
+
+  const discountHasInvalidInput = discountKind !== 'none' && discountValue.trim() !== '' && discount === null;
+
+  // Cada item já guarda o valor TOTAL dele - a soma não multiplica por
+  // quantidade (ver docs/ARCHITECTURE.md §4).
+  const totals = useMemo(() => {
+    const calculableItems = items.map((item) => ({
+      type: item.type,
+      total_price_cents: safeItemCents(item.totalPriceReais),
+    }));
+    return calculateQuoteTotals(calculableItems, discount);
+  }, [items, discount]);
 
   function updateItem(key: string, patch: Partial<EditableItem>) {
     setItems((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)));
@@ -295,13 +338,29 @@ export default function QuoteEditorScreen() {
             />
           </ThemedView>
 
+          <DiscountCard
+            kind={discountKind}
+            value={discountValue}
+            onKindChange={(kind) => {
+              setDiscountKind(kind);
+              if (kind === 'none') setDiscountValue('');
+            }}
+            onValueChange={setDiscountValue}
+            hasInvalidInput={discountHasInvalidInput}
+          />
+
           <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">
-              Total estimado: R$ {(total / 100).toFixed(2).replace('.', ',')}
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Cálculo final com desconto e validação vem na próxima etapa.
-            </ThemedText>
+            <ThemedText type="smallBold">Resumo</ThemedText>
+            {(Object.entries(totals.subtotalByType) as [QuoteItemType, number][])
+              .filter(([, cents], _index, all) => cents > 0 && all.filter(([, c]) => c > 0).length > 1)
+              .map(([type, cents]) => (
+                <SummaryRow key={type} label={SUBTOTAL_TYPE_LABELS[type]} value={formatCentsAsBRL(cents)} />
+              ))}
+            <SummaryRow label="Subtotal" value={formatCentsAsBRL(totals.subtotalCents)} />
+            {totals.discountCents > 0 && (
+              <SummaryRow label="Desconto" value={`- ${formatCentsAsBRL(totals.discountCents)}`} />
+            )}
+            <ThemedText type="smallBold">Total: {formatCentsAsBRL(totals.totalCents)}</ThemedText>
           </ThemedView>
         </ScrollView>
       </SafeAreaView>
@@ -314,12 +373,14 @@ function LabeledInput({
   value,
   onChangeText,
   uncertain,
+  error,
   keyboardType,
 }: {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
   uncertain?: boolean;
+  error?: string;
   keyboardType?: 'default' | 'numeric';
 }) {
   const theme = useTheme();
@@ -327,7 +388,7 @@ function LabeledInput({
     <View style={styles.fieldRow}>
       <ThemedText type="small" themeColor="textSecondary">
         {label}
-        {uncertain ? ' •' : ''}
+        {uncertain && !error ? ' •' : ''}
       </ThemedText>
       <TextInput
         value={value}
@@ -336,9 +397,15 @@ function LabeledInput({
         style={[
           styles.input,
           { color: theme.text, backgroundColor: theme.background },
-          uncertain && styles.uncertainInput,
+          uncertain && !error && styles.uncertainInput,
+          error && styles.errorInput,
         ]}
       />
+      {error && (
+        <ThemedText type="small" style={styles.errorText}>
+          {error}
+        </ThemedText>
+      )}
     </View>
   );
 }
@@ -354,6 +421,8 @@ function ItemCard({
 }) {
   const theme = useTheme();
   const uncertain = item.confidence !== null && item.confidence !== 'high';
+  const parsedValueCents = parseReaisInputToCents(item.totalPriceReais);
+  const hasNegativeValue = parsedValueCents !== null && parsedValueCents < 0;
 
   return (
     <ThemedView
@@ -375,7 +444,7 @@ function ItemCard({
               <ThemedText
                 type="small"
                 style={{ color: item.type === type ? theme.background : theme.textSecondary }}>
-                {type === 'service' ? 'serviço' : type === 'material' ? 'material' : 'outro'}
+                {ITEM_TYPE_LABELS[type]}
               </ThemedText>
             </Pressable>
           ))}
@@ -421,9 +490,77 @@ function ItemCard({
             onChangeText={(totalPriceReais) => onChange(item.key, { totalPriceReais })}
             keyboardType="numeric"
             uncertain={!item.totalPriceReais}
+            error={hasNegativeValue ? 'Valor não pode ser negativo.' : undefined}
           />
         </View>
       </View>
+    </ThemedView>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryRow}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <ThemedText type="small">{value}</ThemedText>
+    </View>
+  );
+}
+
+function DiscountCard({
+  kind,
+  value,
+  onKindChange,
+  onValueChange,
+  hasInvalidInput,
+}: {
+  kind: DiscountKind;
+  value: string;
+  onKindChange: (kind: DiscountKind) => void;
+  onValueChange: (value: string) => void;
+  hasInvalidInput: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <ThemedView type="backgroundElement" style={styles.card}>
+      <ThemedText type="smallBold">Desconto</ThemedText>
+      <View style={styles.typeToggle}>
+        {DISCOUNT_KIND_OPTIONS.map((option) => (
+          <Pressable
+            key={option.value}
+            onPress={() => onKindChange(option.value)}
+            style={[
+              styles.typeOption,
+              {
+                backgroundColor: kind === option.value ? theme.text : 'transparent',
+                borderColor: theme.textSecondary,
+              },
+            ]}>
+            <ThemedText
+              type="small"
+              style={{ color: kind === option.value ? theme.background : theme.textSecondary }}>
+              {option.label}
+            </ThemedText>
+          </Pressable>
+        ))}
+      </View>
+      {kind !== 'none' && (
+        <LabeledInput
+          label={kind === 'fixed' ? 'Valor do desconto (R$)' : 'Desconto (%)'}
+          value={value}
+          onChangeText={onValueChange}
+          keyboardType="numeric"
+          error={
+            hasInvalidInput
+              ? kind === 'percentage'
+                ? 'Percentual precisa estar entre 0 e 100.'
+                : 'Valor inválido.'
+              : undefined
+          }
+        />
+      )}
     </ThemedView>
   );
 }
@@ -484,6 +621,17 @@ const styles = StyleSheet.create({
   uncertainInput: {
     borderWidth: 1,
     borderColor: UNCERTAIN_ACCENT,
+  },
+  errorInput: {
+    borderWidth: 1,
+    borderColor: ERROR_ACCENT,
+  },
+  errorText: {
+    color: ERROR_ACCENT,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   itemsHeader: {
     flexDirection: 'row',
