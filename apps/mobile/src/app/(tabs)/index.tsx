@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
+import { router } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -7,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing, WebTopBarInset } from '@/constants/theme';
 import { useQuoteDraft } from '@/hooks/use-quote-draft';
 import { useTheme } from '@/hooks/use-theme';
+import { createQuoteWithText, interpretQuote } from '@/lib/quotes';
 
 function draftStatusLabel(status: ReturnType<typeof useQuoteDraft>['status']) {
   switch (status) {
@@ -23,14 +25,27 @@ function draftStatusLabel(status: ReturnType<typeof useQuoteDraft>['status']) {
 
 export default function NewQuoteScreen() {
   const theme = useTheme();
-  const { sourceText, setSourceText, status } = useQuoteDraft();
+  const { sourceText, setSourceText, clearDraft, status } = useQuoteDraft();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canContinue = useMemo(() => sourceText.trim().length > 0, [sourceText]);
-  const statusLabel = draftStatusLabel(status);
+  const statusLabel = isSubmitting ? 'Interpretando…' : draftStatusLabel(status);
 
-  function handleContinue() {
-    // A função de interpretação por IA (interpret-quote) ainda não está conectada.
-    Alert.alert('Em breve', 'A interpretação por IA será conectada na próxima etapa.');
+  async function handleContinue() {
+    setIsSubmitting(true);
+    try {
+      const quote = await createQuoteWithText(sourceText.trim());
+      await interpretQuote(quote.id);
+      clearDraft();
+      router.push(`/quote/${quote.id}`);
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível interpretar o texto',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -68,18 +83,22 @@ export default function NewQuoteScreen() {
 
           <Pressable
             accessibilityRole="button"
-            disabled={!canContinue}
+            disabled={!canContinue || isSubmitting}
             onPress={handleContinue}
             style={({ pressed }) => [
               styles.continueButton,
               { backgroundColor: canContinue ? theme.text : theme.backgroundSelected },
-              pressed && canContinue && styles.pressed,
+              pressed && canContinue && !isSubmitting && styles.pressed,
             ]}>
-            <ThemedText
-              type="smallBold"
-              style={{ color: canContinue ? theme.background : theme.textSecondary }}>
-              Continuar
-            </ThemedText>
+            {isSubmitting ? (
+              <ActivityIndicator color={canContinue ? theme.background : theme.textSecondary} />
+            ) : (
+              <ThemedText
+                type="smallBold"
+                style={{ color: canContinue ? theme.background : theme.textSecondary }}>
+                Continuar
+              </ThemedText>
+            )}
           </Pressable>
         </ThemedView>
       </SafeAreaView>
