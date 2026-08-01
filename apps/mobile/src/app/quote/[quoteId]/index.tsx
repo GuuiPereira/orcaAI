@@ -253,13 +253,11 @@ export default function QuoteEditorScreen() {
               label="Telefone"
               value={customer.phone}
               onChangeText={(phone) => setCustomer((c) => ({ ...c, phone }))}
-              uncertain={!customer.phone}
             />
             <LabeledInput
               label="Endereço"
               value={customer.address}
               onChangeText={(address) => setCustomer((c) => ({ ...c, address }))}
-              uncertain={!customer.address}
             />
           </ThemedView>
 
