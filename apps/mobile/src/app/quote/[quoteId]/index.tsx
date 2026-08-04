@@ -16,8 +16,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { shareQuotePdf } from '@/lib/pdf-share';
+import { getCurrentOrganization, type CurrentOrganization } from '@/lib/organizations';
 import { supabase } from '@/lib/supabase';
-import { ensureTestSession, getTestOrganization, type TestOrganization } from '@/lib/test-session';
 import { useTheme } from '@/hooks/use-theme';
 
 // Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
@@ -125,7 +125,7 @@ export default function QuoteEditorScreen() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
-  const [organization, setOrganization] = useState<TestOrganization | null>(null);
+  const [organization, setOrganization] = useState<CurrentOrganization | null>(null);
   const [pdfMode, setPdfMode] = useState<PdfGenerationMode>('completo');
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -159,8 +159,7 @@ export default function QuoteEditorScreen() {
       setLoading(true);
       setErrorMessage(null);
       try {
-        await ensureTestSession();
-        getTestOrganization()
+        getCurrentOrganization()
           .then((org) => {
             if (!cancelled) setOrganization(org);
           })

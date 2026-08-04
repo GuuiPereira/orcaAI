@@ -8,7 +8,6 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { interpretQuote, updateQuoteSourceText } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
-import { ensureTestSession } from '@/lib/test-session';
 import { useTheme } from '@/hooks/use-theme';
 
 // Tela dedicada às perguntas da IA (RF-026/028). Só permite reprocessar
@@ -35,8 +34,6 @@ export default function QuoteQuestionsScreen() {
       setLoading(true);
       setErrorMessage(null);
       try {
-        await ensureTestSession();
-
         const { data: quote, error: quoteError } = await supabase
           .from('quotes')
           .select('source_text')

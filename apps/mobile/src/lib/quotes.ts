@@ -1,10 +1,11 @@
 import type { AiInterpretationResult } from '@orcaai/shared';
 
-import { getTestOrganizationId } from './test-session';
+import { getCurrentOrganizationId } from './organizations';
 import { supabase } from './supabase';
 
 export async function createQuoteWithText(sourceText: string): Promise<{ id: string }> {
-  const organizationId = await getTestOrganizationId();
+  const organizationId = await getCurrentOrganizationId();
+  if (!organizationId) throw new Error('Nenhuma organização encontrada.');
 
   const { data, error } = await supabase
     .from('quotes')
