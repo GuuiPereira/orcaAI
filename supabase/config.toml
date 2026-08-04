@@ -347,6 +347,13 @@ enabled = true
 client_id = "1088834332442-i1trv779vo4v1c1upm2hn48g92abr6ke.apps.googleusercontent.com"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Tem que ser 127.0.0.1 (não o IP da rede local) - o Google recusa IP
+# privado como redirect_uri de OAuth ("device_id and device_name are
+# required for private IP"), só aceita localhost/127.0.0.1 ou domínio
+# público de verdade. Ver docs/AMBIENTE_LOCAL.md - isso significa que o
+# login com Google só é testável de verdade no navegador do computador
+# (ou com um túnel/domínio público) até existir um projeto Supabase
+# hospedado de verdade (Task 9).
 redirect_uri = ""
 url = ""
 # Necessário para login local com Google (ver comentário do provider apple acima).
