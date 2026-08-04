@@ -21,6 +21,10 @@ export default function RootLayout() {
   useEffect(() => {
     if (status === 'loading') return;
     const current = segments[0];
+    // auth-callback (alvo web) precisa de tempo pra trocar o code por
+    // sessão antes de qualquer redirect - nada aqui deve tirar o usuário
+    // dessa tela enquanto isso acontece.
+    if (current === 'auth-callback') return;
     if (status === 'unauthenticated' && current !== 'login') {
       router.replace('/login');
     } else if (status === 'no-organization' && current !== 'no-organization') {
