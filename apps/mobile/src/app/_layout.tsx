@@ -21,16 +21,19 @@ export default function RootLayout() {
   useEffect(() => {
     if (status === 'loading') return;
     const current = segments[0];
-    // auth-callback (alvo web) precisa de tempo pra trocar o code por
-    // sessão antes de qualquer redirect - nada aqui deve tirar o usuário
-    // dessa tela enquanto isso acontece.
-    if (current === 'auth-callback') return;
-    if (status === 'unauthenticated' && current !== 'login') {
-      router.replace('/login');
-    } else if (status === 'no-organization' && current !== 'no-organization') {
-      router.replace('/no-organization');
-    } else if (status === 'ready' && (current === 'login' || current === 'no-organization')) {
-      router.replace('/');
+    if (status === 'unauthenticated') {
+      // auth-callback (alvo web) precisa de tempo pra processar a sessão
+      // vinda do hash da URL antes de virar 'ready'/'no-organization' -
+      // só não expulsa pro /login enquanto isso ainda não aconteceu.
+      if (current !== 'login' && current !== 'auth-callback') {
+        router.replace('/login');
+      }
+    } else if (status === 'no-organization') {
+      if (current !== 'no-organization') router.replace('/no-organization');
+    } else if (status === 'ready') {
+      if (current === 'login' || current === 'no-organization' || current === 'auth-callback') {
+        router.replace('/');
+      }
     }
   }, [status, segments, router]);
 
