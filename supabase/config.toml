@@ -164,9 +164,18 @@ site_url = "http://127.0.0.1:3000"
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 # "mobile://**" (glob) libera o deep link do app (scheme "mobile" em
-# apps/mobile/app.json) usado pelo fluxo de login com Google - ver
-# apps/mobile/src/lib/auth.ts.
-additional_redirect_urls = ["https://127.0.0.1:3000", "mobile://**"]
+# apps/mobile/app.json) usado pelo fluxo de login com Google no nativo -
+# ver apps/mobile/src/lib/auth.ts. As duas de localhost/127.0.0.1:8090
+# cobrem o mesmo fluxo no alvo web (`expo start --web --port 8090`), já
+# que `Linking.createURL()` lá gera uma URL http normal (baseada na origem
+# da página), não o scheme customizado. Sem essas duas entradas o
+# Supabase cai no fallback de `site_url` (porta 3000, nada rodando lá) e
+# dá "conexão recusada" depois de escolher a conta no Google.
+additional_redirect_urls = [
+  "mobile://**",
+  "http://localhost:8090/**",
+  "http://127.0.0.1:8090/**",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
