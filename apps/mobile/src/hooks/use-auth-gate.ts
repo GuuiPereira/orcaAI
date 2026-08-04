@@ -11,9 +11,27 @@ export type AuthGateStatus = 'loading' | 'unauthenticated' | 'no-organization' |
 // legítimo, não um erro).
 type OrganizationCheck = { userId: string; hasOrganization: boolean };
 
+// Criar uma organização (onboarding) não muda a sessão, só o resultado da
+// checagem de organização - por isso o efeito abaixo (que só depende de
+// `session`) não reagiria sozinho. onboarding.tsx chama isso depois de
+// criar a organização com sucesso, pra forçar o gate a checar de novo.
+const listeners = new Set<() => void>();
+export function notifyOrganizationChanged() {
+  listeners.forEach((listener) => listener());
+}
+
 export function useAuthGate(): AuthGateStatus {
   const { session, loading: sessionLoading } = useSession();
   const [orgCheck, setOrgCheck] = useState<OrganizationCheck | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    const listener = () => setRefreshTick((tick) => tick + 1);
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!session) return;
@@ -28,7 +46,7 @@ export function useAuthGate(): AuthGateStatus {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [session, refreshTick]);
 
   if (sessionLoading) return 'loading';
   if (!session) return 'unauthenticated';

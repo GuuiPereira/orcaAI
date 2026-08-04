@@ -8,9 +8,10 @@ import {
 } from '@orcaai/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LabeledInput } from '@/components/labeled-input';
 import { PdfPreview } from '@/components/pdf-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -24,7 +25,6 @@ import { useTheme } from '@/hooks/use-theme';
 // erros de validação (RF-049). Não faz parte da paleta base do app - são
 // acentos semânticos, usados só em borda/texto, nunca como fundo cheio.
 const UNCERTAIN_ACCENT = '#eab308';
-const ERROR_ACCENT = '#dc2626';
 
 const ITEM_TYPE_LABELS: Record<QuoteItemType, string> = {
   service: 'serviço',
@@ -543,48 +543,6 @@ export default function QuoteEditorScreen() {
   );
 }
 
-function LabeledInput({
-  label,
-  value,
-  onChangeText,
-  uncertain,
-  error,
-  keyboardType,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  uncertain?: boolean;
-  error?: string;
-  keyboardType?: 'default' | 'numeric';
-}) {
-  const theme = useTheme();
-  return (
-    <View style={styles.fieldRow}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {label}
-        {uncertain && !error ? ' •' : ''}
-      </ThemedText>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType={keyboardType}
-        style={[
-          styles.input,
-          { color: theme.text, backgroundColor: theme.background },
-          uncertain && !error && styles.uncertainInput,
-          error && styles.errorInput,
-        ]}
-      />
-      {error && (
-        <ThemedText type="small" style={styles.errorText}>
-          {error}
-        </ThemedText>
-      )}
-    </View>
-  );
-}
-
 function ItemCard({
   item,
   onChange,
@@ -783,26 +741,6 @@ const styles = StyleSheet.create({
   uncertainCard: {
     borderWidth: 1,
     borderColor: UNCERTAIN_ACCENT,
-  },
-  fieldRow: {
-    gap: Spacing.half,
-  },
-  input: {
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
-    fontSize: 14,
-  },
-  uncertainInput: {
-    borderWidth: 1,
-    borderColor: UNCERTAIN_ACCENT,
-  },
-  errorInput: {
-    borderWidth: 1,
-    borderColor: ERROR_ACCENT,
-  },
-  errorText: {
-    color: ERROR_ACCENT,
   },
   summaryRow: {
     flexDirection: 'row',

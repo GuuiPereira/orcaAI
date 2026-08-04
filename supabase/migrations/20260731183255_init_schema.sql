@@ -232,9 +232,13 @@ create policy "profiles_insert_own" on public.profiles
 create policy "profiles_update_own" on public.profiles
   for update using (id = auth.uid());
 
--- organizations: visible and manageable by members.
+-- organizations: visible and manageable by members. The owner clause
+-- covers the moment right after creating an organization, before the
+-- owner's own organization_members row exists yet (bootstrap - without
+-- it, PostgREST's insert...returning=representation fails with a RLS
+-- violation, because the SELECT that reads the row back can't see it).
 create policy "organizations_select_member" on public.organizations
-  for select using (public.is_org_member(id));
+  for select using (public.is_org_member(id) or owner_user_id = auth.uid());
 create policy "organizations_insert_owner" on public.organizations
   for insert with check (owner_user_id = auth.uid());
 create policy "organizations_update_member" on public.organizations

@@ -29,9 +29,9 @@ export default function RootLayout() {
         router.replace('/login');
       }
     } else if (status === 'no-organization') {
-      if (current !== 'no-organization') router.replace('/no-organization');
+      if (current !== 'onboarding') router.replace('/onboarding');
     } else if (status === 'ready') {
-      if (current === 'login' || current === 'no-organization' || current === 'auth-callback') {
+      if (current === 'login' || current === 'onboarding' || current === 'auth-callback') {
         router.replace('/');
       }
     }
