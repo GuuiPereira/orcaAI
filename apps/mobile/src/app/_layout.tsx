@@ -4,8 +4,10 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments }
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { ActivityIndicator, useColorScheme, View } from 'react-native';
+import { PaperProvider } from 'react-native-paper';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { paperDarkTheme, paperLightTheme } from '@/constants/paper-theme';
 import { useAuthGate } from '@/hooks/use-auth-gate';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -39,14 +41,16 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      {status === 'loading' ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
-          <ActivityIndicator color={theme.text} />
-        </View>
-      ) : (
-        <Stack screenOptions={{ headerShown: false }} />
-      )}
+      <PaperProvider theme={colorScheme === 'dark' ? paperDarkTheme : paperLightTheme}>
+        <AnimatedSplashOverlay />
+        {status === 'loading' ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.background }}>
+            <ActivityIndicator color={theme.text} />
+          </View>
+        ) : (
+          <Stack screenOptions={{ headerShown: false }} />
+        )}
+      </PaperProvider>
     </ThemeProvider>
   );
 }
