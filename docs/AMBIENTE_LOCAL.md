@@ -311,6 +311,80 @@ selecionar por posição (`page.locator('input, textarea').nth(n)`, na ordem
 em que os campos aparecem na tela) ou adicionar `testID`/`aria-label`
 explícito no componente se isso incomodar em testes futuros.
 
+### Storage privado - logos e PDFs (Task 6 da Fase 2)
+
+Os buckets `logos` e `quote-pdfs` já vêm criados automaticamente por
+`pnpm exec supabase start`/`db reset` (declarados em `supabase/config.toml`,
+`[storage.buckets.*]`) - não precisa criar nada na mão. As policies de
+isolamento por organização ficam na migração
+`20260920163601_storage_policies.sql`.
+
+**Testando as policies direto pela API do Storage** (não dá pra simular
+`auth.uid()` via `psql`/`set_config` como se faz com functions Postgres
+normais - o Storage roda como API própria, então o jeito é autenticar de
+verdade e chamar o endpoint REST):
+
+```bash
+ANON_KEY="<PUBLISHABLE_KEY/ANON_KEY de supabase status>"
+TOKEN=$(curl -s -X POST 'http://127.0.0.1:54321/auth/v1/token?grant_type=password' \
+  -H "apikey: $ANON_KEY" -H "Content-Type: application/json" \
+  -d '{"email":"test@orcaai.local","password":"orcaai-local-test"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+ORG="22222222-2222-4222-8222-222222222222"
+curl -X POST "http://127.0.0.1:54321/storage/v1/object/logos/${ORG}/logo.png" \
+  -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: image/png" --data-binary @caminho/para/imagem.png
+```
+
+Trocar `-X POST` por `-H "x-upsert: true"` (mesmo POST) pra sobrescrever o
+logo; um usuário sem organização (`/auth/v1/signup` + `grant_type=password`,
+como já documentado acima) recebe 400 tentando ler ou escrever num caminho
+de organização que não é a dele.
+
+**Logo (RF-005):** tela de Perfil (`/profile`), card "Logo" - botão
+"Escolher logo"/"Trocar logo" abre o seletor de imagens
+(`expo-image-picker`, dependência nova com módulo nativo - só funciona de
+verdade num app já instalado depois de rodar `eas build` de novo; no
+navegador funciona direto, sem rebuild nenhum). Testado via Playwright:
+`page.waitForEvent('filechooser')` + `fileChooser.setFiles(caminho)`
+simula a escolha de arquivo de verdade (o seletor do `expo-image-picker` no
+web é só um `<input type="file">` escondido, clicado programaticamente -
+Playwright lida com isso nativamente, diferente da tela de login do
+Google). Upload + `organizations.logo_path` gravado + exibição via signed
+URL confirmados; sem erros de console.
+
+**PDF emitido:** depois de "Emitir orçamento" ter sucesso, o app tenta
+gerar e subir o PDF "completo" da versão pro Storage automaticamente
+(`lib/quote-pdf-storage.ts`) e depois chama a function `attach-quote-pdf`
+pra gravar `quote_versions.pdf_path` (essa tabela só aceita escrita via
+service role, mesmo padrão do `issue-quote` - por isso são dois passos
+via function, não um só). **No navegador isso é só um no-op**
+(`quote-pdf-storage.web.ts`): `expo-print` no web não gera um arquivo/
+base64 de verdade, só abre o diálogo de impressão do sistema (mesma
+limitação de `pdf-share.web.ts`) - a emissão em si continua funcionando
+normal, só fica sem PDF anexado (`pdf_path` continua `null`). Testável no
+navegador: emitir não deve gerar nenhum erro/aviso de "PDF não foi salvo".
+**Não testável no navegador:** o upload de verdade do PDF - isso só
+acontece com um development build nativo instalado num dispositivo/
+emulador (precisa de um novo `eas build` por causa do `expo-image-picker`
+- ver seção "EAS CLI" abaixo -, já que essa dependência tem módulo
+nativo). Testando a function isolada, sem depender do app:
+
+```bash
+QUOTE="44444444-4444-4444-8444-444444444444"
+VERSION=1
+# sobe um pdf de teste no caminho que attach-quote-pdf espera
+curl -X POST "http://127.0.0.1:54321/storage/v1/object/quote-pdfs/${ORG}/${QUOTE}/${VERSION}.pdf" \
+  -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/pdf" --data-binary @caminho/para/arquivo.pdf
+
+curl http://127.0.0.1:54321/functions/v1/attach-quote-pdf \
+  -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"quote_id\":\"$QUOTE\",\"version\":$VERSION}"
+```
+
 ### Testando a `interpret-quote` localmente
 
 Essa function precisa de duas coisas além da stack local rodando: segredos de

@@ -40,7 +40,11 @@ const EMPTY_PREFERENCES: OrganizationPreferences = {
 };
 
 // Formato editável (onboarding e edição de perfil - RF-003 a RF-006).
+// `id`/`logoPath` ficam de fora do que `createOrganization`/`updateOrganization`
+// gravam - `id` só existe depois de criada, `logoPath` é escrito à parte,
+// direto após o upload (RF-005, task 6), não pelo salvar do formulário.
 export type OrganizationProfile = {
+  id: string | null;
   tradeName: string;
   legalName: string | null;
   taxId: string | null;
@@ -48,6 +52,7 @@ export type OrganizationProfile = {
   contactEmail: string | null;
   address: OrganizationAddress | null;
   preferences: OrganizationPreferences;
+  logoPath: string | null;
 };
 
 function readAddress(raw: unknown): OrganizationAddress | null {
@@ -79,7 +84,7 @@ export async function getCurrentOrganizationProfile(): Promise<OrganizationProfi
 
   const { data, error } = await supabase
     .from('organizations')
-    .select('trade_name, legal_name, tax_id, contact_phone, contact_email, address, preferences')
+    .select('trade_name, legal_name, tax_id, contact_phone, contact_email, address, preferences, logo_path')
     .eq('id', organizationId)
     .single();
 
@@ -88,6 +93,7 @@ export async function getCurrentOrganizationProfile(): Promise<OrganizationProfi
   }
 
   return {
+    id: organizationId,
     tradeName: data.trade_name,
     legalName: data.legal_name,
     taxId: data.tax_id,
@@ -95,13 +101,19 @@ export async function getCurrentOrganizationProfile(): Promise<OrganizationProfi
     contactEmail: data.contact_email,
     address: readAddress(data.address),
     preferences: readPreferences(data.preferences),
+    logoPath: data.logo_path,
   };
 }
+
+// Rascunho editável (onboarding/formulário de perfil) antes de existir no
+// banco - sem `id` (só existe depois de criada) nem `logoPath` (gravado à
+// parte, direto após o upload do logo - RF-005).
+export type OrganizationProfileInput = Omit<OrganizationProfile, 'id' | 'logoPath'>;
 
 // Cria a organização (RF-004) e a membership do dono (bootstrap - RLS
 // permite porque user_id = auth.uid() cobre a primeira linha, antes de
 // existir qualquer organização pra esse usuário).
-export async function createOrganization(profile: OrganizationProfile): Promise<string> {
+export async function createOrganization(profile: OrganizationProfileInput): Promise<string> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -135,7 +147,7 @@ export async function createOrganization(profile: OrganizationProfile): Promise<
   return organization.id as string;
 }
 
-export async function updateOrganization(organizationId: string, profile: OrganizationProfile): Promise<void> {
+export async function updateOrganization(organizationId: string, profile: OrganizationProfileInput): Promise<void> {
   const { error } = await supabase
     .from('organizations')
     .update({
@@ -149,6 +161,14 @@ export async function updateOrganization(organizationId: string, profile: Organi
     })
     .eq('id', organizationId);
 
+  if (error) throw error;
+}
+
+// RF-005: grava o caminho do logo já enviado ao Storage (task 6) - separado
+// de `updateOrganization` porque o upload acontece na hora, sem esperar o
+// "Salvar" do resto do formulário de perfil.
+export async function setOrganizationLogoPath(organizationId: string, logoPath: string | null): Promise<void> {
+  const { error } = await supabase.from('organizations').update({ logo_path: logoPath }).eq('id', organizationId);
   if (error) throw error;
 }
 

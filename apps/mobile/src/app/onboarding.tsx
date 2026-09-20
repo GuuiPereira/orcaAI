@@ -6,7 +6,7 @@ import { Button, Text, TextInput, useTheme as usePaperTheme } from 'react-native
 import { Spacing } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
 import { notifyOrganizationChanged } from '@/hooks/use-auth-gate';
-import { createOrganization, type OrganizationProfile } from '@/lib/organizations';
+import { createOrganization, type OrganizationProfileInput } from '@/lib/organizations';
 import { supabase } from '@/lib/supabase';
 
 type FormState = {
@@ -28,7 +28,7 @@ type FormState = {
 
 const STEPS = ['Dados da empresa', 'Contato', 'Endereço', 'Condições padrão'] as const;
 
-function toProfile(form: FormState): OrganizationProfile {
+function toProfile(form: FormState): OrganizationProfileInput {
   const hasAddress = [form.street, form.number, form.neighborhood, form.city, form.state, form.zipCode].some(
     (value) => value.trim().length > 0,
   );

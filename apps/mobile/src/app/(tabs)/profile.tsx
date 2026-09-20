@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ActivityIndicator, Avatar, Button, Divider, Text, TextInput, useTheme as usePaperTheme } from 'react-native-paper';
+import {
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Divider,
+  Text,
+  TextInput,
+  useTheme as usePaperTheme,
+} from 'react-native-paper';
 
 import { BottomTabInset, Spacing, WebTopBarInset } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
@@ -10,7 +18,9 @@ import {
   getCurrentOrganizationProfile,
   updateOrganization,
   type OrganizationProfile,
+  type OrganizationProfileInput,
 } from '@/lib/organizations';
+import { getOrganizationLogoUrl, pickAndUploadOrganizationLogo } from '@/lib/storage';
 
 type FormState = {
   tradeName: string;
@@ -49,7 +59,7 @@ function toFormState(profile: OrganizationProfile): FormState {
   };
 }
 
-function toProfile(form: FormState): OrganizationProfile {
+function toProfile(form: FormState): OrganizationProfileInput {
   const hasAddress = [form.street, form.number, form.neighborhood, form.city, form.state, form.zipCode].some(
     (value) => value.trim().length > 0,
   );
@@ -93,6 +103,10 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
+  const [logoPath, setLogoPath] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -104,7 +118,13 @@ export default function ProfileScreen() {
       .then(([id, profile]) => {
         if (cancelled) return;
         setOrganizationId(id);
-        if (profile) setForm(toFormState(profile));
+        if (profile) {
+          setForm(toFormState(profile));
+          setLogoPath(profile.logoPath);
+          getOrganizationLogoUrl(profile.logoPath).then((url) => {
+            if (!cancelled) setLogoUrl(url);
+          });
+        }
       })
       .catch((error) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
@@ -116,6 +136,26 @@ export default function ProfileScreen() {
       cancelled = true;
     };
   }, []);
+
+  // RF-005 (task 6): upload acontece na hora da escolha, sem esperar o
+  // "Salvar" do resto do formulário - mesmo padrão do vínculo de cliente no
+  // editor de orçamento (lib/quotes.ts updateQuoteCustomer).
+  async function handlePickLogo() {
+    if (!organizationId) return;
+    setLogoError(null);
+    setUploadingLogo(true);
+    try {
+      const path = await pickAndUploadOrganizationLogo(organizationId);
+      if (path) {
+        setLogoPath(path);
+        setLogoUrl(await getOrganizationLogoUrl(path));
+      }
+    } catch (error) {
+      setLogoError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -152,12 +192,20 @@ export default function ProfileScreen() {
         ) : form && organizationId ? (
           <>
             <View style={styles.logoRow}>
-              <Avatar.Text size={64} label={initials(form.tradeName)} />
+              {logoUrl ? (
+                <Image source={{ uri: logoUrl }} style={styles.logoImage} />
+              ) : (
+                <Avatar.Text size={64} label={initials(form.tradeName)} />
+              )}
               <View style={styles.logoTextColumn}>
                 <Text variant="bodyMedium">Logo</Text>
                 <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
-                  Em breve - por enquanto usamos suas iniciais.
+                  {logoPath ? 'Usado no orçamento em PDF.' : 'Sem logo ainda - usamos suas iniciais.'}
                 </Text>
+                <Button mode="text" compact onPress={handlePickLogo} loading={uploadingLogo} disabled={uploadingLogo}>
+                  {logoPath ? 'Trocar logo' : 'Escolher logo'}
+                </Button>
+                {logoError && <Text style={{ color: paperTheme.colors.error }}>{logoError}</Text>}
               </View>
             </View>
 
@@ -310,6 +358,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
+  },
+  logoImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
   logoTextColumn: {
     gap: 2,

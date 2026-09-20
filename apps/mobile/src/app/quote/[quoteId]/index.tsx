@@ -31,9 +31,10 @@ import { CustomerPickerModal } from '@/components/customer-picker-modal';
 import { PdfPreview } from '@/components/pdf-preview';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { createCustomer, getCustomer, updateCustomer, type Customer } from '@/lib/customers';
-import { getCurrentOrganization, type CurrentOrganization } from '@/lib/organizations';
 import { goBackOr } from '@/lib/navigation';
+import { getCurrentOrganization, getCurrentOrganizationId, type CurrentOrganization } from '@/lib/organizations';
 import { shareQuotePdf } from '@/lib/pdf-share';
+import { saveIssuedQuotePdf } from '@/lib/quote-pdf-storage';
 import { issueQuote, updateQuoteCustomer } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
 
@@ -538,9 +539,28 @@ export default function QuoteEditorScreen() {
         currentVersion: result.quote.current_version,
         issuedAt: result.quote.issued_at,
       });
+
+      // Task 6: gera e sobe o PDF dessa versão pro Storage - só se ainda não
+      // tiver sido salvo (idempotente: reemitir sem mudar nada não deveria
+      // tentar subir de novo um caminho que já existe). Falha aqui não
+      // desfaz a emissão, que já valeu - só avisa.
+      let pdfWarning: string | null = null;
+      if (!result.version.pdf_path) {
+        try {
+          const organizationId = await getCurrentOrganizationId();
+          const html = organizationId ? buildHtmlFor('completo') : null;
+          if (organizationId && html) {
+            await saveIssuedQuotePdf(html, { organizationId, quoteId, version: result.quote.current_version });
+          }
+        } catch (pdfError) {
+          pdfWarning = pdfError instanceof Error ? pdfError.message : String(pdfError);
+        }
+      }
+
       Alert.alert(
         result.idempotent ? 'Nada mudou desde a última emissão' : 'Orçamento emitido',
-        `Nº ${result.quote.number} · versão ${result.quote.current_version}.`,
+        `Nº ${result.quote.number} · versão ${result.quote.current_version}.` +
+          (pdfWarning ? `\n\nO PDF não foi salvo: ${pdfWarning}` : ''),
       );
     } catch (error) {
       Alert.alert('Não foi possível emitir', error instanceof Error ? error.message : String(error));

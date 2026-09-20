@@ -470,3 +470,9 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/issue-quote/deno.json"
 entrypoint = "./functions/issue-quote/index.ts"
+
+[functions.attach-quote-pdf]
+enabled = true
+verify_jwt = true
+import_map = "./functions/attach-quote-pdf/deno.json"
+entrypoint = "./functions/attach-quote-pdf/index.ts"

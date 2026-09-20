@@ -124,3 +124,20 @@ export async function issueQuote(
   }
   return data as IssueQuoteResult;
 }
+
+export type AttachQuotePdfResult = { pdf_path: string; already_attached: boolean };
+
+// Task 6: grava `quote_versions.pdf_path` depois que o PDF já foi enviado
+// pro bucket `quote-pdfs` (ver lib/quote-pdf-storage.ts) - essa tabela é
+// somente-leitura pra `authenticated`, então essa gravação só acontece via
+// function (mesmo padrão do `issue-quote`).
+export async function attachQuotePdf(quoteId: string, version: number): Promise<AttachQuotePdfResult> {
+  const { data, error } = await supabase.functions.invoke('attach-quote-pdf', {
+    body: { quote_id: quoteId, version },
+  });
+
+  if (error) {
+    throw new Error(await extractFunctionErrorMessage(error, 'Falha ao salvar o PDF emitido.'));
+  }
+  return data as AttachQuotePdfResult;
+}
