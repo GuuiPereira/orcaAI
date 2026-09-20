@@ -1,7 +1,7 @@
 import { formatCentsAsBRL } from "../calc/money.ts";
-import { calculateQuoteTotals } from "../calc/quote-totals.ts";
+import { calculateQuoteTotals, sumItemTotals } from "../calc/quote-totals.ts";
 import type { Discount } from "../domain/discount.ts";
-import type { QuoteItemType } from "../domain/quote-item.ts";
+import { QUOTE_ITEM_TYPE_LABELS, type QuoteItemType } from "../domain/quote-item.ts";
 
 // Modo de geração do documento (decisão de 2026-08-01,
 // .tasks/fase-1-prova-do-nucleo.md item 6): o prestador escolhe entre
@@ -77,33 +77,87 @@ function formatDatePtBR(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR").format(date);
 }
 
+// Ordem fixa de exibição das tabelas por tipo - "other" só existe no modo
+// completo, mas se aparecer, vem por último.
+const TYPE_ORDER: readonly QuoteItemType[] = ["service", "material", "other"];
+
+function buildItemRowHtml(item: PdfItem, showValueColumn: boolean): string {
+  const qty = item.quantity ? escapeHtml(item.quantity) : "-";
+  const unit = item.unit ? escapeHtml(item.unit) : "-";
+  const categoryLine = item.category
+    ? `<br /><small class="muted">${escapeHtml(item.category)}</small>`
+    : "";
+  const valueCell = showValueColumn
+    ? `<td class="value">${item.total_price_cents !== null ? formatCentsAsBRL(item.total_price_cents) : "-"}</td>`
+    : "";
+  return `<tr>
+    <td>${escapeHtml(item.description)}${categoryLine}</td>
+    <td>${qty}</td>
+    <td>${unit}</td>
+    ${valueCell}
+  </tr>`;
+}
+
+// Uma tabela por tipo (serviço/material/outro) em vez de uma tabela única -
+// serviços e materiais não devem ficar misturados na mesma tabela no modo
+// "completo". A coluna "Valor" some inteira quando nenhum item do grupo tem
+// preço: é o caso comum de material por conta do cliente (RF-027 - a IA
+// nunca inventa preço, e aqui a ausência dele é uma opção de negócio
+// válida, não um dado faltando).
+function buildItemsTableHtml(typeItems: readonly PdfItem[], type: QuoteItemType): string {
+  const hasAnyPrice = typeItems.some((item) => item.total_price_cents !== null);
+  const rows = typeItems.map((item) => buildItemRowHtml(item, hasAnyPrice)).join("");
+  const subtotalRow = hasAnyPrice
+    ? `<tr><td colspan="3">Subtotal</td><td class="value">${formatCentsAsBRL(sumItemTotals(typeItems))}</td></tr>`
+    : "";
+  return `<h2>${escapeHtml(QUOTE_ITEM_TYPE_LABELS[type])}</h2>
+  <table>
+    <thead>
+      <tr><th>Descrição</th><th>Qtd.</th><th>Unidade</th>${hasAnyPrice ? '<th class="value">Valor</th>' : ""}</tr>
+    </thead>
+    <tbody>
+      ${rows}
+      ${subtotalRow}
+    </tbody>
+  </table>`;
+}
+
 export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
   const items = filterItemsForMode(input.items, input.mode);
   const totals = calculateQuoteTotals(items, input.discount);
   const modeNotice = MODE_NOTICE[input.mode];
+  const hasAnyPricedItem = items.some((item) => item.total_price_cents !== null);
 
-  const itemsRows = items
-    .map((item) => {
-      const qty = item.quantity ? escapeHtml(item.quantity) : "-";
-      const unit = item.unit ? escapeHtml(item.unit) : "-";
-      const value =
-        item.total_price_cents !== null ? formatCentsAsBRL(item.total_price_cents) : "-";
-      const categoryLine = item.category
-        ? `<br /><small class="muted">${escapeHtml(item.category)}</small>`
-        : "";
-      return `<tr>
-        <td>${escapeHtml(item.description)}${categoryLine}</td>
-        <td>${qty}</td>
-        <td>${unit}</td>
-        <td class="value">${value}</td>
-      </tr>`;
-    })
-    .join("");
+  const itemsSectionsHtml =
+    TYPE_ORDER.map((type) => {
+      const typeItems = items.filter((item) => item.type === type);
+      return typeItems.length > 0 ? buildItemsTableHtml(typeItems, type) : "";
+    }).join("") || "<h2>Itens</h2><p>Nenhum item.</p>";
 
-  const discountRow =
-    totals.discountCents > 0
-      ? `<tr><td colspan="3">Desconto</td><td class="value">- ${formatCentsAsBRL(totals.discountCents)}</td></tr>`
-      : "";
+  // Sem nenhum preço no documento inteiro (ex.: PDF só de materiais, todos
+  // por conta do cliente), um "Total: R$ 0,00" passaria a falsa impressão
+  // de que o serviço é gratuito - melhor não mostrar nenhum total.
+  const summarySectionHtml = hasAnyPricedItem
+    ? `<h2>Resumo</h2>
+  <table>
+    <tbody>
+      ${(Object.entries(totals.subtotalByType) as [QuoteItemType, number][])
+        .filter(([, cents], _index, all) => cents > 0 && all.filter(([, c]) => c > 0).length > 1)
+        .map(
+          ([type, cents]) =>
+            `<tr><td>${escapeHtml(QUOTE_ITEM_TYPE_LABELS[type])}</td><td class="value">${formatCentsAsBRL(cents)}</td></tr>`,
+        )
+        .join("")}
+      <tr><td>Subtotal</td><td class="value">${formatCentsAsBRL(totals.subtotalCents)}</td></tr>
+      ${
+        totals.discountCents > 0
+          ? `<tr><td>Desconto</td><td class="value">- ${formatCentsAsBRL(totals.discountCents)}</td></tr>`
+          : ""
+      }
+      <tr class="total-row"><td>Total</td><td class="value">${formatCentsAsBRL(totals.totalCents)}</td></tr>
+    </tbody>
+  </table>`
+    : `<div class="notice">Nenhum item deste documento tem valor informado.</div>`;
 
   const paymentLine = input.commercialTerms.paymentTerms
     ? `<p><strong>Forma de pagamento:</strong> ${escapeHtml(input.commercialTerms.paymentTerms)}</p>`
@@ -169,18 +223,9 @@ export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
     ${customerContactLine ? `<br />${customerContactLine}` : ""}
   </p>
 
-  <h2>Itens</h2>
-  <table>
-    <thead>
-      <tr><th>Descrição</th><th>Qtd.</th><th>Unidade</th><th class="value">Valor</th></tr>
-    </thead>
-    <tbody>
-      ${itemsRows || '<tr><td colspan="4">Nenhum item.</td></tr>'}
-      <tr><td colspan="3">Subtotal</td><td class="value">${formatCentsAsBRL(totals.subtotalCents)}</td></tr>
-      ${discountRow}
-      <tr class="total-row"><td colspan="3">Total</td><td class="value">${formatCentsAsBRL(totals.totalCents)}</td></tr>
-    </tbody>
-  </table>
+  ${itemsSectionsHtml}
+
+  ${summarySectionHtml}
 
   ${commercialTermsSection}
 </body>

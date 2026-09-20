@@ -57,6 +57,12 @@ describe('buildInterpretationPrompt', () => {
     expect(system).toMatch(/total_price_cents.*sempre o valor total/i);
   });
 
+  it('instructs the model not to question/warn/lower confidence for a material item with no price', () => {
+    const { system } = buildInterpretationPrompt('texto qualquer');
+    expect(system).toMatch(/material.*ausência de preço é uma condição válida/i);
+    expect(system).toMatch(/nunca deve gerar pergunta.*aviso.*nem reduzir "confidence"/i);
+  });
+
   it('truncates source text beyond the length cap', () => {
     const longText = 'a'.repeat(5000);
     const { user, truncated } = buildInterpretationPrompt(longText);

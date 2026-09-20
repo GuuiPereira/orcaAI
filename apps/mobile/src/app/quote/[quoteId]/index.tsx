@@ -5,42 +5,51 @@ import {
   centsToReaisInput,
   formatCentsAsBRL,
   parseReaisInputToCents,
+  QUOTE_ITEM_TYPE_LABELS,
 } from '@orcaai/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, KeyboardTypeOptions, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  ActivityIndicator,
+  Appbar,
+  Banner,
+  Button,
+  Card,
+  Chip,
+  Divider,
+  HelperText,
+  IconButton,
+  SegmentedButtons,
+  Text,
+  TextInput,
+  useTheme as usePaperTheme,
+} from 'react-native-paper';
 
-import { LabeledInput } from '@/components/labeled-input';
+import { CustomerPickerModal } from '@/components/customer-picker-modal';
 import { PdfPreview } from '@/components/pdf-preview';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { shareQuotePdf } from '@/lib/pdf-share';
+import { createCustomer, getCustomer, updateCustomer, type Customer } from '@/lib/customers';
 import { getCurrentOrganization, type CurrentOrganization } from '@/lib/organizations';
+import { shareQuotePdf } from '@/lib/pdf-share';
+import { updateQuoteCustomer } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
-import { useTheme } from '@/hooks/use-theme';
 
 // Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
 // erros de validação (RF-049). Não faz parte da paleta base do app - são
 // acentos semânticos, usados só em borda/texto, nunca como fundo cheio.
 const UNCERTAIN_ACCENT = '#eab308';
 
-const ITEM_TYPE_LABELS: Record<QuoteItemType, string> = {
-  service: 'serviço',
-  material: 'material',
-  other: 'outro',
-};
-
-const SUBTOTAL_TYPE_LABELS: Record<QuoteItemType, string> = {
-  service: 'Serviços',
-  material: 'Materiais',
-  other: 'Outros',
-};
+const ITEM_TYPE_SEGMENTS = [
+  { value: 'service', label: 'Serviço' },
+  { value: 'material', label: 'Material' },
+  { value: 'other', label: 'Outro' },
+];
 
 type DiscountKind = 'none' | 'fixed' | 'percentage';
 
-const DISCOUNT_KIND_OPTIONS: { value: DiscountKind; label: string }[] = [
+const DISCOUNT_KIND_OPTIONS = [
   { value: 'none', label: 'Nenhum' },
   { value: 'fixed', label: 'Valor fixo' },
   { value: 'percentage', label: 'Percentual' },
@@ -50,11 +59,11 @@ const DISCOUNT_KIND_OPTIONS: { value: DiscountKind; label: string }[] = [
 // .tasks/fase-1-prova-do-nucleo.md item 6).
 type PdfGenerationMode = 'completo' | 'separado' | 'service' | 'material';
 
-const PDF_MODE_OPTIONS: { value: PdfGenerationMode; label: string }[] = [
+const PDF_MODE_OPTIONS = [
   { value: 'completo', label: 'Completo' },
   { value: 'separado', label: 'Separado' },
-  { value: 'service', label: 'Só serviço' },
-  { value: 'material', label: 'Só material' },
+  { value: 'service', label: 'Serviço' },
+  { value: 'material', label: 'Material' },
 ];
 
 type EditableItem = {
@@ -68,12 +77,6 @@ type EditableItem = {
   // Valor TOTAL do item (não é preço por unidade).
   totalPriceReais: string;
   confidence: AiConfidence | null;
-};
-
-type EditableCustomer = {
-  name: string;
-  phone: string;
-  address: string;
 };
 
 type EditableCommercialTerms = {
@@ -105,7 +108,7 @@ function safeItemCents(raw: string): number | null {
 }
 
 export default function QuoteEditorScreen() {
-  const theme = useTheme();
+  const paperTheme = usePaperTheme();
   const { quoteId } = useLocalSearchParams<{ quoteId: string }>();
   const keyCounter = useRef(0);
   const nextKey = () => `item-${keyCounter.current++}`;
@@ -115,7 +118,11 @@ export default function QuoteEditorScreen() {
   const [sourceText, setSourceText] = useState('');
   const [showOriginalText, setShowOriginalText] = useState(false);
 
-  const [customer, setCustomer] = useState<EditableCustomer>({ name: '', phone: '', address: '' });
+  const [linkedCustomer, setLinkedCustomer] = useState<Customer | null>(null);
+  const [customerPickerVisible, setCustomerPickerVisible] = useState(false);
+  const [customerActionPending, setCustomerActionPending] = useState(false);
+  const [aiCustomerSuggestion, setAiCustomerSuggestion] = useState<AiInterpretationResult['customer'] | null>(null);
+  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const [items, setItems] = useState<EditableItem[]>([]);
   const [commercialTerms, setCommercialTerms] = useState<EditableCommercialTerms>({
     paymentTerms: '',
@@ -131,11 +138,12 @@ export default function QuoteEditorScreen() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   function applyResult(result: AiInterpretationResult) {
-    setCustomer({
-      name: result.customer.name ?? '',
-      phone: result.customer.phone ?? '',
-      address: result.customer.address ?? '',
-    });
+    // RF-013/migração de cliente da IA: o texto extraído nunca vira um
+    // registro paralelo - só uma sugestão pra criar/atualizar o cliente de
+    // verdade (customers), avaliada contra o cliente já vinculado (ver
+    // aiSuggestionRelevant abaixo).
+    setAiCustomerSuggestion(result.customer);
+    setSuggestionDismissed(false);
     setItems(result.items.map((item) => itemFromResult(item, nextKey())));
     setCommercialTerms({
       paymentTerms: result.commercial_terms.payment_terms ?? '',
@@ -170,12 +178,22 @@ export default function QuoteEditorScreen() {
 
         const { data: quote, error: quoteError } = await supabase
           .from('quotes')
-          .select('source_text')
+          .select('source_text, customer_id')
           .eq('id', quoteId)
           .single();
         if (quoteError || !quote) throw quoteError ?? new Error('Orçamento não encontrado.');
         if (cancelled) return;
         setSourceText(quote.source_text ?? '');
+
+        if (quote.customer_id) {
+          getCustomer(quote.customer_id)
+            .then((customer) => {
+              if (!cancelled) setLinkedCustomer(customer);
+            })
+            .catch(() => {
+              // Falha ao buscar o cliente vinculado não deve travar o editor.
+            });
+        }
 
         const { data: interpretation, error: interpretationError } = await supabase
           .from('ai_interpretations')
@@ -223,6 +241,94 @@ export default function QuoteEditorScreen() {
   }, [discountKind, discountValue]);
 
   const discountHasInvalidInput = discountKind !== 'none' && discountValue.trim() !== '' && discount === null;
+
+  // Só é relevante mostrar a sugestão se a IA achou um nome e ele traz algo
+  // que o cliente vinculado ainda não tem (nome diferente, telefone ou
+  // endereço novos) - evita repetir uma sugestão que já foi aplicada.
+  const aiSuggestionRelevant = useMemo(() => {
+    if (!aiCustomerSuggestion?.name || suggestionDismissed) return false;
+    if (!linkedCustomer) return true;
+    const nameDiffers = linkedCustomer.name.trim().toLowerCase() !== aiCustomerSuggestion.name.trim().toLowerCase();
+    const hasNewPhone = Boolean(aiCustomerSuggestion.phone) && !linkedCustomer.phone;
+    const hasNewAddress = Boolean(aiCustomerSuggestion.address) && !linkedCustomer.address;
+    return nameDiffers || hasNewPhone || hasNewAddress;
+  }, [aiCustomerSuggestion, linkedCustomer, suggestionDismissed]);
+
+  async function persistCustomerLink(customerId: string | null) {
+    if (!quoteId) return;
+    try {
+      await updateQuoteCustomer(quoteId, customerId);
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível salvar o cliente',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  function handleSelectCustomer(customer: Customer) {
+    setCustomerPickerVisible(false);
+    setLinkedCustomer(customer);
+    setSuggestionDismissed(false);
+    persistCustomerLink(customer.id);
+  }
+
+  function handleClearCustomer() {
+    setCustomerPickerVisible(false);
+    setLinkedCustomer(null);
+    setSuggestionDismissed(false);
+    persistCustomerLink(null);
+  }
+
+  async function handleCreateCustomerFromSuggestion() {
+    if (!aiCustomerSuggestion?.name) return;
+    setCustomerActionPending(true);
+    try {
+      const created = await createCustomer({
+        name: aiCustomerSuggestion.name,
+        phone: aiCustomerSuggestion.phone,
+        email: null,
+        document: null,
+        address: aiCustomerSuggestion.address,
+        notes: null,
+      });
+      setLinkedCustomer(created);
+      await persistCustomerLink(created.id);
+      setSuggestionDismissed(true);
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível criar o cliente',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setCustomerActionPending(false);
+    }
+  }
+
+  async function handleUpdateCustomerFromSuggestion() {
+    if (!linkedCustomer || !aiCustomerSuggestion) return;
+    setCustomerActionPending(true);
+    try {
+      const patch = {
+        name: linkedCustomer.name,
+        phone: linkedCustomer.phone ?? aiCustomerSuggestion.phone,
+        email: linkedCustomer.email,
+        document: linkedCustomer.document,
+        address: linkedCustomer.address ?? aiCustomerSuggestion.address,
+        notes: linkedCustomer.notes,
+      };
+      await updateCustomer(linkedCustomer.id, patch);
+      setLinkedCustomer({ ...linkedCustomer, ...patch });
+      setSuggestionDismissed(true);
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível atualizar o cliente',
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      setCustomerActionPending(false);
+    }
+  }
 
   // Cada item já guarda o valor TOTAL dele - a soma não multiplica por
   // quantidade (ver docs/ARCHITECTURE.md §4).
@@ -275,9 +381,9 @@ export default function QuoteEditorScreen() {
       mode,
       organization,
       customer: {
-        name: customer.name || null,
-        phone: customer.phone || null,
-        address: customer.address || null,
+        name: linkedCustomer?.name ?? null,
+        phone: linkedCustomer?.phone ?? null,
+        address: linkedCustomer?.address ?? null,
       },
       items: toPdfItems(),
       discount,
@@ -333,116 +439,165 @@ export default function QuoteEditorScreen() {
     }
   }
 
+  const header = (
+    <Appbar.Header elevated={false} style={{ backgroundColor: paperTheme.colors.background }}>
+      <Appbar.BackAction onPress={() => router.back()} />
+      <Appbar.Content title="Revisar orçamento" />
+    </Appbar.Header>
+  );
+
   if (loading) {
     return (
-      <ThemedView style={styles.centered}>
-        <ActivityIndicator color={theme.text} />
-        <ThemedText themeColor="textSecondary">Carregando orçamento…</ThemedText>
-      </ThemedView>
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+        <SafeAreaView edges={['top']}>{header}</SafeAreaView>
+        <View style={styles.centered}>
+          <ActivityIndicator />
+          <Text style={{ color: paperTheme.colors.onSurfaceVariant }}>Carregando orçamento…</Text>
+        </View>
+      </View>
     );
   }
 
   if (errorMessage) {
     return (
-      <ThemedView style={styles.centered}>
-        <ThemedText type="smallBold">Não foi possível carregar</ThemedText>
-        <ThemedText themeColor="textSecondary">{errorMessage}</ThemedText>
-      </ThemedView>
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+        <SafeAreaView edges={['top']}>{header}</SafeAreaView>
+        <View style={styles.centered}>
+          <Text variant="titleMedium">Não foi possível carregar</Text>
+          <Text style={{ color: paperTheme.colors.onSurfaceVariant }}>{errorMessage}</Text>
+        </View>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+    <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+      <SafeAreaView edges={['top']}>{header}</SafeAreaView>
+
+      <SafeAreaView style={styles.safeArea} edges={['bottom', 'left', 'right']}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled">
-          <Pressable onPress={() => router.back()}>
-            <ThemedText type="link">← Voltar</ThemedText>
-          </Pressable>
-          <ThemedText type="title" style={styles.title}>
-            Revisar orçamento
-          </ThemedText>
-          <ThemedText themeColor="textSecondary">
+          <Text variant="bodyMedium" style={{ color: paperTheme.colors.onSurfaceVariant }}>
             Confira o que a IA entendeu e corrija o que precisar.
-          </ThemedText>
+          </Text>
 
-          <Pressable onPress={() => setShowOriginalText((v) => !v)}>
-            <ThemedText type="link">
-              {showOriginalText ? 'Ocultar texto original' : 'Ver texto original'}
-            </ThemedText>
-          </Pressable>
+          <Button
+            mode="text"
+            onPress={() => setShowOriginalText((v) => !v)}
+            icon={showOriginalText ? 'chevron-up' : 'chevron-down'}
+            style={styles.selfStart}>
+            {showOriginalText ? 'Ocultar texto original' : 'Ver texto original'}
+          </Button>
           {showOriginalText && (
-            <ThemedView type="backgroundElement" style={styles.card}>
-              <ThemedText type="small">{sourceText}</ThemedText>
-            </ThemedView>
+            <Card mode="outlined">
+              <Card.Content>
+                <Text variant="bodySmall">{sourceText}</Text>
+              </Card.Content>
+            </Card>
           )}
 
           {warnings.length > 0 && (
-            <ThemedView type="backgroundElement" style={[styles.card, styles.warningCard]}>
-              <ThemedText type="smallBold">Avisos</ThemedText>
-              {warnings.map((warning, index) => (
-                <ThemedText key={index} type="small">
-                  • {warning}
-                </ThemedText>
-              ))}
-            </ThemedView>
+            <Banner visible icon="alert-circle-outline">
+              {warnings.join('\n')}
+            </Banner>
           )}
 
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Cliente</ThemedText>
-            <LabeledInput
-              label="Nome"
-              value={customer.name}
-              onChangeText={(name) => setCustomer((c) => ({ ...c, name }))}
-              uncertain={!customer.name}
-            />
-            <LabeledInput
-              label="Telefone"
-              value={customer.phone}
-              onChangeText={(phone) => setCustomer((c) => ({ ...c, phone }))}
-            />
-            <LabeledInput
-              label="Endereço"
-              value={customer.address}
-              onChangeText={(address) => setCustomer((c) => ({ ...c, address }))}
-            />
-          </ThemedView>
+          <Card mode="outlined">
+            <Card.Content style={styles.cardContentGap}>
+              <Text variant="titleMedium">Cliente</Text>
+              {linkedCustomer ? (
+                <View>
+                  <Text variant="bodyLarge">{linkedCustomer.name}</Text>
+                  {linkedCustomer.phone && (
+                    <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+                      {linkedCustomer.phone}
+                    </Text>
+                  )}
+                  {linkedCustomer.address && (
+                    <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+                      {linkedCustomer.address}
+                    </Text>
+                  )}
+                </View>
+              ) : (
+                <Text variant="bodyMedium" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+                  Nenhum cliente vinculado.
+                </Text>
+              )}
+              <Button mode="text" onPress={() => setCustomerPickerVisible(true)} style={styles.selfStart}>
+                {linkedCustomer ? 'Trocar cliente' : 'Selecionar cliente'}
+              </Button>
+            </Card.Content>
+          </Card>
 
-          <ThemedView style={styles.itemsHeader}>
-            <ThemedText type="smallBold">Itens</ThemedText>
-            <Pressable onPress={addItem}>
-              <ThemedText type="link">+ adicionar item</ThemedText>
-            </Pressable>
-          </ThemedView>
+          {aiSuggestionRelevant && aiCustomerSuggestion?.name && (
+            <Banner
+              visible
+              icon="creation"
+              actions={[
+                linkedCustomer
+                  ? {
+                      label: 'Atualizar cadastro',
+                      onPress: handleUpdateCustomerFromSuggestion,
+                      disabled: customerActionPending,
+                    }
+                  : {
+                      label: 'Criar cliente',
+                      onPress: handleCreateCustomerFromSuggestion,
+                      disabled: customerActionPending,
+                    },
+                { label: 'Ignorar', onPress: () => setSuggestionDismissed(true), disabled: customerActionPending },
+              ]}>
+              {linkedCustomer
+                ? `A IA encontrou ${[
+                    aiCustomerSuggestion.phone && !linkedCustomer.phone ? 'telefone' : null,
+                    aiCustomerSuggestion.address && !linkedCustomer.address ? 'endereço' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' e ')} pra ${linkedCustomer.name}.`
+                : `"${aiCustomerSuggestion.name}"${
+                    aiCustomerSuggestion.phone ? ` · ${aiCustomerSuggestion.phone}` : ''
+                  }`}
+            </Banner>
+          )}
+
+          <View style={styles.itemsHeader}>
+            <Text variant="titleMedium">Itens</Text>
+            <Button mode="text" icon="plus" onPress={addItem}>
+              Adicionar item
+            </Button>
+          </View>
 
           {items.map((item) => (
             <ItemCard key={item.key} item={item} onChange={updateItem} onRemove={removeItem} />
           ))}
 
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Condições comerciais</ThemedText>
-            <LabeledInput
-              label="Forma de pagamento"
-              value={commercialTerms.paymentTerms}
-              onChangeText={(paymentTerms) => setCommercialTerms((c) => ({ ...c, paymentTerms }))}
-            />
-            <LabeledInput
-              label="Prazo estimado (dias)"
-              value={commercialTerms.estimatedDurationDays}
-              onChangeText={(estimatedDurationDays) =>
-                setCommercialTerms((c) => ({ ...c, estimatedDurationDays }))
-              }
-              keyboardType="numeric"
-            />
-            <LabeledInput
-              label="Validade (dias)"
-              value={commercialTerms.validityDays}
-              onChangeText={(validityDays) => setCommercialTerms((c) => ({ ...c, validityDays }))}
-              keyboardType="numeric"
-            />
-          </ThemedView>
+          <Card mode="outlined">
+            <Card.Content style={styles.cardContentGap}>
+              <Text variant="titleMedium">Condições comerciais</Text>
+              <QuoteField
+                label="Forma de pagamento"
+                value={commercialTerms.paymentTerms}
+                onChangeText={(paymentTerms) => setCommercialTerms((c) => ({ ...c, paymentTerms }))}
+              />
+              <QuoteField
+                label="Prazo estimado (dias)"
+                value={commercialTerms.estimatedDurationDays}
+                onChangeText={(estimatedDurationDays) =>
+                  setCommercialTerms((c) => ({ ...c, estimatedDurationDays }))
+                }
+                keyboardType="numeric"
+              />
+              <QuoteField
+                label="Validade (dias)"
+                value={commercialTerms.validityDays}
+                onChangeText={(validityDays) => setCommercialTerms((c) => ({ ...c, validityDays }))}
+                keyboardType="numeric"
+              />
+            </Card.Content>
+          </Card>
 
           <DiscountCard
             kind={discountKind}
@@ -455,60 +610,45 @@ export default function QuoteEditorScreen() {
             hasInvalidInput={discountHasInvalidInput}
           />
 
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Resumo</ThemedText>
-            {(Object.entries(totals.subtotalByType) as [QuoteItemType, number][])
-              .filter(([, cents], _index, all) => cents > 0 && all.filter(([, c]) => c > 0).length > 1)
-              .map(([type, cents]) => (
-                <SummaryRow key={type} label={SUBTOTAL_TYPE_LABELS[type]} value={formatCentsAsBRL(cents)} />
-              ))}
-            <SummaryRow label="Subtotal" value={formatCentsAsBRL(totals.subtotalCents)} />
-            {totals.discountCents > 0 && (
-              <SummaryRow label="Desconto" value={`- ${formatCentsAsBRL(totals.discountCents)}`} />
-            )}
-            <ThemedText type="smallBold">Total: {formatCentsAsBRL(totals.totalCents)}</ThemedText>
-          </ThemedView>
-
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Gerar orçamento</ThemedText>
-            <View style={styles.typeToggle}>
-              {PDF_MODE_OPTIONS.map((option) => (
-                <Pressable
-                  key={option.value}
-                  onPress={() => setPdfMode(option.value)}
-                  style={[
-                    styles.typeOption,
-                    {
-                      backgroundColor: pdfMode === option.value ? theme.text : 'transparent',
-                      borderColor: theme.textSecondary,
-                    },
-                  ]}>
-                  <ThemedText
-                    type="small"
-                    style={{ color: pdfMode === option.value ? theme.background : theme.textSecondary }}>
-                    {option.label}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              disabled={generatingPdf || !organization}
-              onPress={handleGeneratePress}
-              style={({ pressed }) => [
-                styles.generateButton,
-                { backgroundColor: theme.text },
-                pressed && styles.pressed,
-              ]}>
-              {generatingPdf ? (
-                <ActivityIndicator color={theme.background} />
-              ) : (
-                <ThemedText type="smallBold" style={{ color: theme.background }}>
-                  {pdfMode === 'separado' ? 'Gerar e compartilhar (2 PDFs)' : 'Ver prévia do PDF'}
-                </ThemedText>
+          <Card mode="outlined">
+            <Card.Content style={styles.cardContentGap}>
+              <Text variant="titleMedium">Resumo</Text>
+              {(Object.entries(totals.subtotalByType) as [QuoteItemType, number][])
+                .filter(([, cents], _index, all) => cents > 0 && all.filter(([, c]) => c > 0).length > 1)
+                .map(([type, cents]) => (
+                  <SummaryRow key={type} label={QUOTE_ITEM_TYPE_LABELS[type]} value={formatCentsAsBRL(cents)} />
+                ))}
+              <SummaryRow label="Subtotal" value={formatCentsAsBRL(totals.subtotalCents)} />
+              {totals.discountCents > 0 && (
+                <SummaryRow label="Desconto" value={`- ${formatCentsAsBRL(totals.discountCents)}`} />
               )}
-            </Pressable>
-          </ThemedView>
+              <Divider />
+              <Text variant="titleMedium">Total: {formatCentsAsBRL(totals.totalCents)}</Text>
+            </Card.Content>
+          </Card>
+
+          <Card mode="outlined">
+            <Card.Content style={styles.cardContentGap}>
+              <Text variant="titleMedium">Gerar orçamento</Text>
+              <View style={styles.chipRow}>
+                {PDF_MODE_OPTIONS.map((option) => (
+                  <Chip
+                    key={option.value}
+                    selected={pdfMode === option.value}
+                    onPress={() => setPdfMode(option.value as PdfGenerationMode)}>
+                    {option.label}
+                  </Chip>
+                ))}
+              </View>
+              <Button
+                mode="contained"
+                disabled={generatingPdf || !organization}
+                loading={generatingPdf}
+                onPress={handleGeneratePress}>
+                {pdfMode === 'separado' ? 'Gerar e compartilhar (2 PDFs)' : 'Ver prévia do PDF'}
+              </Button>
+            </Card.Content>
+          </Card>
         </ScrollView>
       </SafeAreaView>
 
@@ -519,27 +659,73 @@ export default function QuoteEditorScreen() {
         <SafeAreaView style={styles.previewContainer}>
           {previewHtml && <PdfPreview html={previewHtml} />}
           <View style={styles.previewActions}>
-            <Pressable
-              onPress={() => setPreviewHtml(null)}
-              style={[styles.previewSecondaryButton, { borderColor: theme.text }]}>
-              <ThemedText type="smallBold">Fechar</ThemedText>
-            </Pressable>
-            <Pressable
+            <Button mode="outlined" onPress={() => setPreviewHtml(null)} style={styles.flexButton}>
+              Fechar
+            </Button>
+            <Button
+              mode="contained"
               disabled={generatingPdf}
+              loading={generatingPdf}
               onPress={handleShareFromPreview}
-              style={[styles.previewPrimaryButton, { backgroundColor: theme.text }]}>
-              {generatingPdf ? (
-                <ActivityIndicator color={theme.background} />
-              ) : (
-                <ThemedText type="smallBold" style={{ color: theme.background }}>
-                  Compartilhar PDF
-                </ThemedText>
-              )}
-            </Pressable>
+              style={styles.flexButtonWide}>
+              Compartilhar PDF
+            </Button>
           </View>
         </SafeAreaView>
       </Modal>
-    </ThemedView>
+
+      <CustomerPickerModal
+        visible={customerPickerVisible}
+        onClose={() => setCustomerPickerVisible(false)}
+        onSelect={handleSelectCustomer}
+        onClear={linkedCustomer ? handleClearCustomer : undefined}
+      />
+    </View>
+  );
+}
+
+// Campo de texto com marcação de "incerto" (RF-024/025, borda/legenda
+// amarela) e de erro de validação (RF-049, borda/legenda vermelha nativa do
+// Paper) - as duas nunca aparecem juntas pro mesmo campo.
+function QuoteField({
+  label,
+  value,
+  onChangeText,
+  uncertain,
+  error,
+  keyboardType,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  uncertain?: boolean;
+  error?: string;
+  keyboardType?: KeyboardTypeOptions;
+}) {
+  const showUncertain = Boolean(uncertain) && !error;
+  return (
+    <View>
+      <TextInput
+        mode="outlined"
+        label={label}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType}
+        error={Boolean(error)}
+        outlineColor={showUncertain ? UNCERTAIN_ACCENT : undefined}
+        activeOutlineColor={showUncertain ? UNCERTAIN_ACCENT : undefined}
+      />
+      {showUncertain && (
+        <HelperText type="info" visible style={styles.uncertainHelperText}>
+          Sem evidência clara no texto original
+        </HelperText>
+      )}
+      {error && (
+        <HelperText type="error" visible>
+          {error}
+        </HelperText>
+      )}
+    </View>
   );
 }
 
@@ -552,92 +738,71 @@ function ItemCard({
   onChange: (key: string, patch: Partial<EditableItem>) => void;
   onRemove: (key: string) => void;
 }) {
-  const theme = useTheme();
   const uncertain = item.confidence !== null && item.confidence !== 'high';
   const parsedValueCents = parseReaisInputToCents(item.totalPriceReais);
   const hasNegativeValue = parsedValueCents !== null && parsedValueCents < 0;
 
   return (
-    <ThemedView
-      type="backgroundElement"
-      style={[styles.card, uncertain && styles.uncertainCard]}>
-      <View style={styles.itemHeaderRow}>
-        <View style={styles.typeToggle}>
-          {(['service', 'material', 'other'] as const).map((type) => (
-            <Pressable
-              key={type}
-              onPress={() => onChange(item.key, { type })}
-              style={[
-                styles.typeOption,
-                {
-                  backgroundColor: item.type === type ? theme.text : 'transparent',
-                  borderColor: theme.textSecondary,
-                },
-              ]}>
-              <ThemedText
-                type="small"
-                style={{ color: item.type === type ? theme.background : theme.textSecondary }}>
-                {ITEM_TYPE_LABELS[type]}
-              </ThemedText>
-            </Pressable>
-          ))}
+    <Card mode="outlined" style={uncertain ? { borderColor: UNCERTAIN_ACCENT } : undefined}>
+      <Card.Content style={styles.cardContentGap}>
+        <View style={styles.itemHeaderRow}>
+          <SegmentedButtons
+            style={styles.itemTypeSegments}
+            value={item.type}
+            onValueChange={(value) => onChange(item.key, { type: value as QuoteItemType })}
+            buttons={ITEM_TYPE_SEGMENTS}
+          />
+          <IconButton icon="delete-outline" onPress={() => onRemove(item.key)} />
         </View>
-        <Pressable onPress={() => onRemove(item.key)}>
-          <ThemedText type="small" themeColor="textSecondary">
-            remover
-          </ThemedText>
-        </Pressable>
-      </View>
 
-      <LabeledInput
-        label="Descrição"
-        value={item.description}
-        onChangeText={(description) => onChange(item.key, { description })}
-        uncertain={!item.description}
-      />
-      <LabeledInput
-        label="Categoria"
-        value={item.category}
-        onChangeText={(category) => onChange(item.key, { category })}
-      />
-      <View style={styles.itemNumbersRow}>
-        <View style={styles.itemNumberField}>
-          <LabeledInput
-            label="Quantidade"
-            value={item.quantity}
-            onChangeText={(quantity) => onChange(item.key, { quantity })}
-            keyboardType="numeric"
-          />
+        <QuoteField
+          label="Descrição"
+          value={item.description}
+          onChangeText={(description) => onChange(item.key, { description })}
+          uncertain={!item.description}
+        />
+        <QuoteField
+          label="Categoria"
+          value={item.category}
+          onChangeText={(category) => onChange(item.key, { category })}
+        />
+        <View style={styles.itemNumbersRow}>
+          <View style={styles.itemNumberField}>
+            <QuoteField
+              label="Quantidade"
+              value={item.quantity}
+              onChangeText={(quantity) => onChange(item.key, { quantity })}
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.itemNumberField}>
+            <QuoteField label="Unidade" value={item.unit} onChangeText={(unit) => onChange(item.key, { unit })} />
+          </View>
         </View>
-        <View style={styles.itemNumberField}>
-          <LabeledInput
-            label="Unidade"
-            value={item.unit}
-            onChangeText={(unit) => onChange(item.key, { unit })}
-          />
-        </View>
-        <View style={styles.itemNumberField}>
-          <LabeledInput
-            label="Valor (R$)"
-            value={item.totalPriceReais}
-            onChangeText={(totalPriceReais) => onChange(item.key, { totalPriceReais })}
-            keyboardType="numeric"
-            uncertain={!item.totalPriceReais}
-            error={hasNegativeValue ? 'Valor não pode ser negativo.' : undefined}
-          />
-        </View>
-      </View>
-    </ThemedView>
+        <QuoteField
+          label="Valor (R$)"
+          value={item.totalPriceReais}
+          onChangeText={(totalPriceReais) => onChange(item.key, { totalPriceReais })}
+          keyboardType="numeric"
+          // Material sem preço é uma opção de negócio válida (por conta do
+          // cliente), não um dado faltando - só sinaliza "incerto" pra
+          // serviço/outro, onde a ausência de valor é de fato lacuna.
+          uncertain={item.type !== 'material' && !item.totalPriceReais}
+          error={hasNegativeValue ? 'Valor não pode ser negativo.' : undefined}
+        />
+      </Card.Content>
+    </Card>
   );
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
+  const paperTheme = usePaperTheme();
   return (
     <View style={styles.summaryRow}>
-      <ThemedText type="small" themeColor="textSecondary">
+      <Text variant="bodyMedium" style={{ color: paperTheme.colors.onSurfaceVariant }}>
         {label}
-      </ThemedText>
-      <ThemedText type="small">{value}</ThemedText>
+      </Text>
+      <Text variant="bodyMedium">{value}</Text>
     </View>
   );
 }
@@ -655,46 +820,32 @@ function DiscountCard({
   onValueChange: (value: string) => void;
   hasInvalidInput: boolean;
 }) {
-  const theme = useTheme();
   return (
-    <ThemedView type="backgroundElement" style={styles.card}>
-      <ThemedText type="smallBold">Desconto</ThemedText>
-      <View style={styles.typeToggle}>
-        {DISCOUNT_KIND_OPTIONS.map((option) => (
-          <Pressable
-            key={option.value}
-            onPress={() => onKindChange(option.value)}
-            style={[
-              styles.typeOption,
-              {
-                backgroundColor: kind === option.value ? theme.text : 'transparent',
-                borderColor: theme.textSecondary,
-              },
-            ]}>
-            <ThemedText
-              type="small"
-              style={{ color: kind === option.value ? theme.background : theme.textSecondary }}>
-              {option.label}
-            </ThemedText>
-          </Pressable>
-        ))}
-      </View>
-      {kind !== 'none' && (
-        <LabeledInput
-          label={kind === 'fixed' ? 'Valor do desconto (R$)' : 'Desconto (%)'}
-          value={value}
-          onChangeText={onValueChange}
-          keyboardType="numeric"
-          error={
-            hasInvalidInput
-              ? kind === 'percentage'
-                ? 'Percentual precisa estar entre 0 e 100.'
-                : 'Valor inválido.'
-              : undefined
-          }
+    <Card mode="outlined">
+      <Card.Content style={styles.cardContentGap}>
+        <Text variant="titleMedium">Desconto</Text>
+        <SegmentedButtons
+          value={kind}
+          onValueChange={(value) => onKindChange(value as DiscountKind)}
+          buttons={DISCOUNT_KIND_OPTIONS}
         />
-      )}
-    </ThemedView>
+        {kind !== 'none' && (
+          <QuoteField
+            label={kind === 'fixed' ? 'Valor do desconto (R$)' : 'Desconto (%)'}
+            value={value}
+            onChangeText={onValueChange}
+            keyboardType="numeric"
+            error={
+              hasInvalidInput
+                ? kind === 'percentage'
+                  ? 'Percentual precisa estar entre 0 e 100.'
+                  : 'Valor inválido.'
+                : undefined
+            }
+          />
+        )}
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -721,26 +872,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
+    paddingTop: Spacing.three,
     paddingBottom: Spacing.six,
     gap: Spacing.three,
   },
-  title: {
-    fontSize: 32,
-    lineHeight: 40,
+  selfStart: {
+    alignSelf: 'flex-start',
   },
-  card: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
+  cardContentGap: {
     gap: Spacing.two,
   },
-  warningCard: {
-    borderWidth: 1,
-    borderColor: UNCERTAIN_ACCENT,
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.one,
   },
-  uncertainCard: {
-    borderWidth: 1,
-    borderColor: UNCERTAIN_ACCENT,
+  uncertainHelperText: {
+    color: UNCERTAIN_ACCENT,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -757,15 +905,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  typeToggle: {
-    flexDirection: 'row',
-    gap: Spacing.one,
-  },
-  typeOption: {
-    borderWidth: 1,
-    borderRadius: Spacing.five,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half,
+  itemTypeSegments: {
+    flex: 1,
   },
   itemNumbersRow: {
     flexDirection: 'row',
@@ -773,14 +914,6 @@ const styles = StyleSheet.create({
   },
   itemNumberField: {
     flex: 1,
-  },
-  generateButton: {
-    alignItems: 'center',
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
-  },
-  pressed: {
-    opacity: 0.8,
   },
   previewContainer: {
     flex: 1,
@@ -790,17 +923,10 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     padding: Spacing.three,
   },
-  previewSecondaryButton: {
+  flexButton: {
     flex: 1,
-    alignItems: 'center',
-    borderWidth: 1,
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
   },
-  previewPrimaryButton: {
+  flexButtonWide: {
     flex: 2,
-    alignItems: 'center',
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
   },
 });

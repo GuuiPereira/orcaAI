@@ -1,13 +1,13 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, TextInput } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button, Card, Text, TextInput, useTheme as usePaperTheme } from 'react-native-paper';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { CustomerPickerModal } from '@/components/customer-picker-modal';
 import { BottomTabInset, MaxContentWidth, Spacing, WebTopBarInset } from '@/constants/theme';
 import { useQuoteDraft } from '@/hooks/use-quote-draft';
-import { useTheme } from '@/hooks/use-theme';
+import type { Customer } from '@/lib/customers';
 import { createQuoteWithText, interpretQuote } from '@/lib/quotes';
 
 function draftStatusLabel(status: ReturnType<typeof useQuoteDraft>['status']) {
@@ -24,9 +24,11 @@ function draftStatusLabel(status: ReturnType<typeof useQuoteDraft>['status']) {
 }
 
 export default function NewQuoteScreen() {
-  const theme = useTheme();
+  const paperTheme = usePaperTheme();
   const { sourceText, setSourceText, clearDraft, status } = useQuoteDraft();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   const canContinue = useMemo(() => sourceText.trim().length > 0, [sourceText]);
   const statusLabel = isSubmitting ? 'Interpretando…' : draftStatusLabel(status);
@@ -34,9 +36,10 @@ export default function NewQuoteScreen() {
   async function handleContinue() {
     setIsSubmitting(true);
     try {
-      const quote = await createQuoteWithText(sourceText.trim());
+      const quote = await createQuoteWithText(sourceText.trim(), selectedCustomer?.id ?? null);
       const { result } = await interpretQuote(quote.id);
       clearDraft();
+      setSelectedCustomer(null);
       router.push(
         result.questions.length > 0 ? `/quote/${quote.id}/questions` : `/quote/${quote.id}`,
       );
@@ -51,60 +54,66 @@ export default function NewQuoteScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.header}>
-          <ThemedText type="title" style={styles.title}>
-            Novo orçamento
-          </ThemedText>
-          <ThemedText themeColor="textSecondary">
+        <View style={styles.header}>
+          <Text variant="headlineMedium">Novo orçamento</Text>
+          <Text variant="bodyMedium" style={{ color: paperTheme.colors.onSurfaceVariant }}>
             Descreva o serviço como você já costuma escrever ou ditar. Depois você revisa e
             confirma cada detalhe antes de gerar o orçamento.
-          </ThemedText>
-        </ThemedView>
+          </Text>
+        </View>
+
+        <Card mode="outlined" onPress={() => setPickerVisible(true)}>
+          <Card.Content>
+            <Text variant="labelMedium" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+              Cliente
+            </Text>
+            <Text variant="bodyLarge">
+              {selectedCustomer ? selectedCustomer.name : 'Selecionar cliente (opcional)'}
+            </Text>
+          </Card.Content>
+        </Card>
 
         <TextInput
+          mode="outlined"
           value={sourceText}
           onChangeText={setSourceText}
           placeholder="Ex.: Pintura da casa da dona Maria, duas demãos nas paredes da sala e dos 3 quartos. Material por conta dela. Mão de obra 2800, metade na entrada..."
-          placeholderTextColor={theme.textSecondary}
           multiline
-          textAlignVertical="top"
-          style={[
-            styles.textInput,
-            { color: theme.text, backgroundColor: theme.backgroundElement },
-          ]}
+          style={styles.textInput}
         />
 
-        <ThemedView style={styles.footer}>
+        <View style={styles.footer}>
           {statusLabel && (
-            <ThemedText type="small" themeColor="textSecondary">
+            <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
               {statusLabel}
-            </ThemedText>
+            </Text>
           )}
 
-          <Pressable
-            accessibilityRole="button"
-            disabled={!canContinue || isSubmitting}
-            onPress={handleContinue}
-            style={({ pressed }) => [
-              styles.continueButton,
-              { backgroundColor: canContinue ? theme.text : theme.backgroundSelected },
-              pressed && canContinue && !isSubmitting && styles.pressed,
-            ]}>
-            {isSubmitting ? (
-              <ActivityIndicator color={canContinue ? theme.background : theme.textSecondary} />
-            ) : (
-              <ThemedText
-                type="smallBold"
-                style={{ color: canContinue ? theme.background : theme.textSecondary }}>
-                Continuar
-              </ThemedText>
-            )}
-          </Pressable>
-        </ThemedView>
+          <Button mode="contained" onPress={handleContinue} loading={isSubmitting} disabled={!canContinue || isSubmitting}>
+            Continuar
+          </Button>
+        </View>
       </SafeAreaView>
-    </ThemedView>
+
+      <CustomerPickerModal
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        onSelect={(customer) => {
+          setSelectedCustomer(customer);
+          setPickerVisible(false);
+        }}
+        onClear={
+          selectedCustomer
+            ? () => {
+                setSelectedCustomer(null);
+                setPickerVisible(false);
+              }
+            : undefined
+        }
+      />
+    </View>
   );
 }
 
@@ -129,29 +138,11 @@ const styles = StyleSheet.create({
   header: {
     gap: Spacing.two,
   },
-  title: {
-    fontSize: 32,
-    lineHeight: 40,
-  },
   textInput: {
     flex: 1,
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-    fontSize: 16,
-    lineHeight: 24,
     minHeight: 160,
   },
   footer: {
     gap: Spacing.two,
-    alignItems: 'flex-end',
-  },
-  continueButton: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
-  },
-  pressed: {
-    opacity: 0.8,
   },
 });

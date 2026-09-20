@@ -129,3 +129,53 @@ describe("buildQuoteHtml", () => {
     expect(html).not.toContain("Condições comerciais");
   });
 });
+
+describe("buildQuoteHtml - per-type item tables", () => {
+  it("renders services, materials and other items as separate tables, not one combined table", () => {
+    const html = buildQuoteHtml({ ...baseInput, mode: "completo" });
+    expect(html).toContain("<h2>Serviços</h2>");
+    expect(html).toContain("<h2>Materiais</h2>");
+    expect(html).toContain("<h2>Outros</h2>");
+    // Cada seção tem sua própria tabela - o cabeçalho "Descrição" aparece
+    // uma vez por tabela, não uma vez só pro documento inteiro.
+    expect(html.match(/<th>Descrição<\/th>/g)).toHaveLength(3);
+  });
+
+  it("omits the Valor column entirely when no item of that type has a price (material por conta do cliente)", () => {
+    const unpriced: PdfItem[] = [
+      { type: "material", description: "Tinta", category: null, quantity: null, unit: null, total_price_cents: null },
+    ];
+    const html = buildQuoteHtml({ ...baseInput, items: unpriced, mode: "material" });
+    expect(html).not.toContain('<th class="value">Valor</th>');
+  });
+
+  it("keeps the Valor column when at least one item of that type has a price", () => {
+    const mixed: PdfItem[] = [
+      { type: "material", description: "Tinta", category: null, quantity: null, unit: null, total_price_cents: null },
+      { type: "material", description: "Cimento", category: null, quantity: null, unit: null, total_price_cents: 1000 },
+    ];
+    const html = buildQuoteHtml({ ...baseInput, items: mixed, mode: "material" });
+    expect(html).toContain('<th class="value">Valor</th>');
+  });
+});
+
+describe("buildQuoteHtml - summary with unpriced items", () => {
+  it("shows a notice instead of totals when nothing in the document has a price", () => {
+    const unpriced: PdfItem[] = [
+      { type: "material", description: "Tinta", category: null, quantity: null, unit: null, total_price_cents: null },
+    ];
+    const html = buildQuoteHtml({ ...baseInput, items: unpriced, mode: "material" });
+    expect(html).not.toContain("<h2>Resumo</h2>");
+    expect(html).toContain("Nenhum item deste documento tem valor informado.");
+  });
+
+  it("still totals normally when only some items lack a price", () => {
+    const mixed: PdfItem[] = [
+      { type: "service", description: "Pintura", category: null, quantity: null, unit: null, total_price_cents: 20000 },
+      { type: "material", description: "Tinta", category: null, quantity: null, unit: null, total_price_cents: null },
+    ];
+    const html = buildQuoteHtml({ ...baseInput, items: mixed, mode: "completo" });
+    expect(html).toContain("<h2>Resumo</h2>");
+    expect(html).toContain("200,00");
+  });
+});

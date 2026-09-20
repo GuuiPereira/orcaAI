@@ -3,6 +3,12 @@ import { z } from "zod";
 export const quoteItemTypeSchema = z.enum(["service", "material", "other"]);
 export type QuoteItemType = z.infer<typeof quoteItemTypeSchema>;
 
+export const QUOTE_ITEM_TYPE_LABELS: Record<QuoteItemType, string> = {
+  service: "Serviços",
+  material: "Materiais",
+  other: "Outros",
+};
+
 export const quoteItemSchema = z.object({
   id: z.uuid(),
   quote_id: z.uuid(),

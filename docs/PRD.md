@@ -199,6 +199,11 @@ propõe dados, mas nunca é a autoridade dos cálculos.
 8. Campos não informados permanecem vazios ou são marcados para confirmação.
 9. Termos vagos como "material incluso" não devem gerar lista fictícia.
 10. O PDF deve indicar que é um orçamento, não uma nota fiscal.
+11. Preço em item de material é opcional - material sem preço é uma opção
+    de negócio válida (fica por conta do cliente), não um dado faltando: a
+    IA não deve perguntar sobre isso, a revisão não deve marcar o campo
+    como pendente, e o PDF não deve mostrar coluna de valor num grupo de
+    material totalmente sem preço (decisão de 2026-08-08).
 
 ## 8. Estados
 

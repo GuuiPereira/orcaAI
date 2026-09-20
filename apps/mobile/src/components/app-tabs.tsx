@@ -20,6 +20,11 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="customers">
+        <NativeTabs.Trigger.Label>Clientes</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="person.2" md="people" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="profile">
         <NativeTabs.Trigger.Label>Perfil</NativeTabs.Trigger.Label>
         {/* TODO: ícone dedicado de perfil - reaproveitando o de "explore" por enquanto. */}

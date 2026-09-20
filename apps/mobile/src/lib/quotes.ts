@@ -3,13 +3,21 @@ import type { AiInterpretationResult } from '@orcaai/shared';
 import { getCurrentOrganizationId } from './organizations';
 import { supabase } from './supabase';
 
-export async function createQuoteWithText(sourceText: string): Promise<{ id: string }> {
+export async function createQuoteWithText(
+  sourceText: string,
+  customerId: string | null = null,
+): Promise<{ id: string }> {
   const organizationId = await getCurrentOrganizationId();
   if (!organizationId) throw new Error('Nenhuma organização encontrada.');
 
   const { data, error } = await supabase
     .from('quotes')
-    .insert({ organization_id: organizationId, source_text: sourceText, status: 'rascunho' })
+    .insert({
+      organization_id: organizationId,
+      source_text: sourceText,
+      status: 'rascunho',
+      customer_id: customerId,
+    })
     .select('id')
     .single();
 
@@ -21,6 +29,14 @@ export async function createQuoteWithText(sourceText: string): Promise<{ id: str
 
 export async function updateQuoteSourceText(quoteId: string, sourceText: string): Promise<void> {
   const { error } = await supabase.from('quotes').update({ source_text: sourceText }).eq('id', quoteId);
+  if (error) throw error;
+}
+
+// RF-013: vincula (ou desvincula, com null) o cliente ao orçamento -
+// gravado direto, sem esperar a emissão (task 4 cuida do resto do
+// versionamento).
+export async function updateQuoteCustomer(quoteId: string, customerId: string | null): Promise<void> {
+  const { error } = await supabase.from('quotes').update({ customer_id: customerId }).eq('id', quoteId);
   if (error) throw error;
 }
 
