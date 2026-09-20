@@ -246,6 +246,71 @@ mudança de sessão, e criar organização não muda a sessão) - por isso
 (`apps/mobile/src/hooks/use-auth-gate.ts`) explicitamente após o
 `createOrganization()` ter sucesso, forçando o gate a checar de novo.
 
+### Numeração e emissão (Task 4 da Fase 2)
+
+`issue-quote` (`supabase/functions/issue-quote`) não precisa de segredo
+nenhum (só fala com o Postgres) - basta a stack local rodando e a function
+sendo servida. **Descoberta útil:** `supabase functions serve <nome>` serve
+**todas** as functions da pasta `supabase/functions/`, não só a que foi
+passada por nome - `pnpm run dev` (que só chama `functions serve
+interpret-quote` explicitamente) já deixa `issue-quote` acessível também,
+sem precisar adicionar nada ao script.
+
+No editor (`/quote/[quoteId]`), o card "Emissão" (abaixo de "Resumo") chama
+essa function com os itens/desconto/condições que estão em memória no
+momento - até a emissão, nada disso é gravado (`quote_items`/`quotes.discount`/
+`quotes.commercial_terms` continuam vazios). A function recalcula os totais
+no backend (nunca confia no que o app mandou - regra de negócio 6), numera
+só na 1ª emissão (`next_quote_number`, função transacional no Postgres -
+reemissão reaproveita o número, regra 4), grava um snapshot completo e
+imutável em `quote_versions` (com dados de organização/cliente copiados
+daquele momento, não só o id) e só a partir daí grava os itens de verdade em
+`quote_items`. Reemitir com o **mesmo** conteúdo (mesmos itens/desconto/
+condições) não cria outra versão - devolve a última já existente
+(idempotência, RNF-004); mudar qualquer coisa e emitir de novo cria uma
+versão nova com o mesmo número.
+
+Testando via curl (usuário/orçamento do seed):
+
+```bash
+ANON_KEY="<PUBLISHABLE_KEY/ANON_KEY de supabase status>"
+
+TOKEN=$(curl -s -X POST 'http://127.0.0.1:54321/auth/v1/token?grant_type=password' \
+  -H "apikey: $ANON_KEY" -H "Content-Type: application/json" \
+  -d '{"email":"test@orcaai.local","password":"orcaai-local-test"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s http://127.0.0.1:54321/functions/v1/issue-quote \
+  -X POST -H "apikey: $ANON_KEY" -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "quote_id":"44444444-4444-4444-8444-444444444444",
+    "items":[{"type":"service","description":"Pintura sala","category":null,"quantity":null,"unit":null,"total_price_cents":150000}],
+    "discount": null,
+    "commercial_terms": {"payment_terms":"50% entrada","estimated_duration_days":5,"validity_days":10}
+  }'
+```
+
+Testado via Playwright (sessão injetada, como na seção acima) no orçamento
+do seed: adicionar um item e clicar "Emitir orçamento" gera o Nº
+`2026-0001` e versão 1; recarregar a página traz o item de volta (vem de
+`quote_items`, não mais da última interpretação da IA - é o que diferencia
+um orçamento já emitido de um rascunho novo); clicar em "Emitir nova
+versão" de novo sem mudar nada mantém a versão 1 (idempotente); mudar o
+valor do item e emitir de novo cria a versão 2 mantendo o mesmo número.
+Conferido direto no Postgres (`docker exec supabase_db_orcaai psql -U
+postgres -d postgres`) que `quotes`, `quote_items` e `quote_versions`
+batem com o que a tela mostra. Sem erros de console em nenhum passo.
+
+**Pegadinha ao automatizar o formulário do editor:** os campos de item
+(Descrição, Valor etc.) são `TextInput` do React Native Paper - o texto que
+parece um placeholder é na verdade a prop `label` (renderizada num `<div>`
+solto, sem `for`/`aria-labelledby` ligando ao `<input>`), então nem
+`getByPlaceholder` nem `getByLabel` do Playwright acham o campo. Funciona
+selecionar por posição (`page.locator('input, textarea').nth(n)`, na ordem
+em que os campos aparecem na tela) ou adicionar `testID`/`aria-label`
+explícito no componente se isso incomodar em testes futuros.
+
 ### Testando a `interpret-quote` localmente
 
 Essa function precisa de duas coisas além da stack local rodando: segredos de

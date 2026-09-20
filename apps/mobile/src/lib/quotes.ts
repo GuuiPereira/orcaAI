@@ -1,4 +1,4 @@
-import type { AiInterpretationResult } from '@orcaai/shared';
+import type { AiInterpretationResult, CommercialTerms, Discount, PdfItem, QuoteStatus } from '@orcaai/shared';
 
 import { getCurrentOrganizationId } from './organizations';
 import { supabase } from './supabase';
@@ -59,12 +59,12 @@ export async function interpretQuote(
   });
 
   if (error) {
-    throw new Error(await extractFunctionErrorMessage(error));
+    throw new Error(await extractFunctionErrorMessage(error, 'Falha ao chamar interpret-quote.'));
   }
   return data as InterpretQuoteResult;
 }
 
-async function extractFunctionErrorMessage(error: unknown): Promise<string> {
+async function extractFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
   if (error && typeof error === 'object' && 'context' in error) {
     const context = (error as { context?: Response }).context;
     if (context && typeof context.json === 'function') {
@@ -76,5 +76,51 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string> {
       }
     }
   }
-  return error instanceof Error ? error.message : 'Falha ao chamar interpret-quote.';
+  return error instanceof Error ? error.message : fallback;
+}
+
+export type IssuedQuoteVersion = {
+  id: string;
+  version: number;
+  snapshot_hash: string;
+  issued_at: string;
+  pdf_path: string | null;
+};
+
+export type IssueQuoteResult = {
+  quote: {
+    id: string;
+    number: string;
+    status: QuoteStatus;
+    issued_at: string;
+    valid_until: string | null;
+    subtotal_cents: number;
+    total_cents: number;
+    current_version: number;
+  };
+  version: IssuedQuoteVersion;
+  idempotent: boolean;
+};
+
+// Task 4 (numeração, emissão e versões imutáveis): itens/desconto/condições
+// só são gravados de verdade aqui - até a emissão ficam efêmeros no editor
+// (ver .tasks/fase-2-mvp-fechado.md). O backend recalcula os totais (regra
+// de negócio 6), nunca confia no que o app mandou.
+export async function issueQuote(
+  quoteId: string,
+  payload: { items: PdfItem[]; discount: Discount | null; commercialTerms: CommercialTerms },
+): Promise<IssueQuoteResult> {
+  const { data, error } = await supabase.functions.invoke('issue-quote', {
+    body: {
+      quote_id: quoteId,
+      items: payload.items,
+      discount: payload.discount,
+      commercial_terms: payload.commercialTerms,
+    },
+  });
+
+  if (error) {
+    throw new Error(await extractFunctionErrorMessage(error, 'Falha ao emitir o orçamento.'));
+  }
+  return data as IssueQuoteResult;
 }

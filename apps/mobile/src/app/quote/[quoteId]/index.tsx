@@ -1,4 +1,4 @@
-import type { AiConfidence, AiInterpretationResult, Discount, PdfItem, QuoteItemType } from '@orcaai/shared';
+import type { AiConfidence, AiInterpretationResult, Discount, PdfItem, QuoteItemType, QuoteStatus } from '@orcaai/shared';
 import {
   buildQuoteHtml,
   calculateQuoteTotals,
@@ -33,7 +33,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { createCustomer, getCustomer, updateCustomer, type Customer } from '@/lib/customers';
 import { getCurrentOrganization, type CurrentOrganization } from '@/lib/organizations';
 import { shareQuotePdf } from '@/lib/pdf-share';
-import { updateQuoteCustomer } from '@/lib/quotes';
+import { issueQuote, updateQuoteCustomer } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
 
 // Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
@@ -136,6 +136,13 @@ export default function QuoteEditorScreen() {
   const [pdfMode, setPdfMode] = useState<PdfGenerationMode>('completo');
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [issuing, setIssuing] = useState(false);
+  const [quoteMeta, setQuoteMeta] = useState<{
+    number: string | null;
+    status: QuoteStatus;
+    currentVersion: number;
+    issuedAt: string | null;
+  }>({ number: null, status: 'rascunho', currentVersion: 0, issuedAt: null });
 
   function applyResult(result: AiInterpretationResult) {
     // RF-013/migração de cliente da IA: o texto extraído nunca vira um
@@ -178,12 +185,18 @@ export default function QuoteEditorScreen() {
 
         const { data: quote, error: quoteError } = await supabase
           .from('quotes')
-          .select('source_text, customer_id')
+          .select('source_text, customer_id, number, status, current_version, issued_at, discount, commercial_terms')
           .eq('id', quoteId)
           .single();
         if (quoteError || !quote) throw quoteError ?? new Error('Orçamento não encontrado.');
         if (cancelled) return;
         setSourceText(quote.source_text ?? '');
+        setQuoteMeta({
+          number: quote.number,
+          status: quote.status as QuoteStatus,
+          currentVersion: quote.current_version,
+          issuedAt: quote.issued_at,
+        });
 
         if (quote.customer_id) {
           getCustomer(quote.customer_id)
@@ -195,18 +208,71 @@ export default function QuoteEditorScreen() {
             });
         }
 
-        const { data: interpretation, error: interpretationError } = await supabase
-          .from('ai_interpretations')
-          .select('status, result')
+        // Depois da 1ª emissão, quote_items passa a ser a fonte de verdade
+        // (task 4) - reabrir o editor não deve voltar pro rascunho que a IA
+        // extraiu da última vez, e sim pro que foi de fato emitido.
+        const { data: existingItems, error: existingItemsError } = await supabase
+          .from('quote_items')
+          .select('type, description, category, quantity, unit, total_price_cents')
           .eq('quote_id', quoteId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (interpretationError) throw interpretationError;
+          .order('position', { ascending: true });
+        if (existingItemsError) throw existingItemsError;
         if (cancelled) return;
 
-        if (interpretation?.status === 'concluido' && interpretation.result) {
-          applyResult(interpretation.result as AiInterpretationResult);
+        if (existingItems && existingItems.length > 0) {
+          setItems(
+            existingItems.map((item) =>
+              itemFromResult(
+                {
+                  type: item.type as QuoteItemType,
+                  description: item.description,
+                  category: item.category,
+                  quantity: item.quantity,
+                  unit: item.unit,
+                  total_price_cents: item.total_price_cents,
+                  confidence: 'high',
+                  source_excerpt: '',
+                },
+                nextKey(),
+              ),
+            ),
+          );
+          if (quote.discount) {
+            if (quote.discount.type === 'fixed') {
+              setDiscountKind('fixed');
+              setDiscountValue(centsToReaisInput(quote.discount.value_cents));
+            } else {
+              setDiscountKind('percentage');
+              setDiscountValue(String(quote.discount.value_percent));
+            }
+          }
+          if (quote.commercial_terms) {
+            setCommercialTerms({
+              paymentTerms: quote.commercial_terms.payment_terms ?? '',
+              estimatedDurationDays:
+                quote.commercial_terms.estimated_duration_days !== null
+                  ? String(quote.commercial_terms.estimated_duration_days)
+                  : '',
+              validityDays:
+                quote.commercial_terms.validity_days !== null
+                  ? String(quote.commercial_terms.validity_days)
+                  : '',
+            });
+          }
+        } else {
+          const { data: interpretation, error: interpretationError } = await supabase
+            .from('ai_interpretations')
+            .select('status, result')
+            .eq('quote_id', quoteId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (interpretationError) throw interpretationError;
+          if (cancelled) return;
+
+          if (interpretation?.status === 'concluido' && interpretation.result) {
+            applyResult(interpretation.result as AiInterpretationResult);
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -424,6 +490,42 @@ export default function QuoteEditorScreen() {
     }
   }
 
+  async function handleIssuePress() {
+    if (!quoteId) return;
+    if (items.length === 0) {
+      Alert.alert('Adicione itens', 'É preciso pelo menos um item para emitir o orçamento.');
+      return;
+    }
+    setIssuing(true);
+    try {
+      const result = await issueQuote(quoteId, {
+        items: toPdfItems(),
+        discount,
+        commercialTerms: {
+          payment_terms: commercialTerms.paymentTerms || null,
+          estimated_duration_days: commercialTerms.estimatedDurationDays
+            ? Number(commercialTerms.estimatedDurationDays)
+            : null,
+          validity_days: commercialTerms.validityDays ? Number(commercialTerms.validityDays) : null,
+        },
+      });
+      setQuoteMeta({
+        number: result.quote.number,
+        status: result.quote.status,
+        currentVersion: result.quote.current_version,
+        issuedAt: result.quote.issued_at,
+      });
+      Alert.alert(
+        result.idempotent ? 'Nada mudou desde a última emissão' : 'Orçamento emitido',
+        `Nº ${result.quote.number} · versão ${result.quote.current_version}.`,
+      );
+    } catch (error) {
+      Alert.alert('Não foi possível emitir', error instanceof Error ? error.message : String(error));
+    } finally {
+      setIssuing(false);
+    }
+  }
+
   async function handleShareFromPreview() {
     if (!previewHtml) return;
     setGeneratingPdf(true);
@@ -624,6 +726,28 @@ export default function QuoteEditorScreen() {
               )}
               <Divider />
               <Text variant="titleMedium">Total: {formatCentsAsBRL(totals.totalCents)}</Text>
+            </Card.Content>
+          </Card>
+
+          <Card mode="outlined">
+            <Card.Content style={styles.cardContentGap}>
+              <Text variant="titleMedium">Emissão</Text>
+              <Text style={{ color: paperTheme.colors.onSurfaceVariant }}>
+                {quoteMeta.number
+                  ? `Nº ${quoteMeta.number} · versão ${quoteMeta.currentVersion}${
+                      quoteMeta.issuedAt
+                        ? ` · emitido em ${new Date(quoteMeta.issuedAt).toLocaleDateString('pt-BR')}`
+                        : ''
+                    }`
+                  : 'Ainda não emitido - o número e a versão são gerados na emissão.'}
+              </Text>
+              <Button
+                mode="contained"
+                disabled={issuing || items.length === 0}
+                loading={issuing}
+                onPress={handleIssuePress}>
+                {quoteMeta.number ? 'Emitir nova versão' : 'Emitir orçamento'}
+              </Button>
             </Card.Content>
           </Card>
 
