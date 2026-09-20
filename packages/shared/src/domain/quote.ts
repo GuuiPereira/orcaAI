@@ -17,6 +17,28 @@ export const quoteStatusSchema = z.enum([
 
 export type QuoteStatus = z.infer<typeof quoteStatusSchema>;
 
+export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  rascunho: "Rascunho",
+  pronto_para_revisao: "Pronto para revisão",
+  emitido: "Emitido",
+  enviado: "Enviado",
+  aprovado: "Aprovado",
+  recusado: "Recusado",
+  expirado: "Expirado",
+  substituido_por_nova_versao: "Substituído por nova versão",
+};
+
+// RF-073: estados comerciais que o próprio usuário marca manualmente depois
+// da emissão - os demais (rascunho/pronto_para_revisao/emitido/substituido_
+// por_nova_versao) só mudam como efeito de outras ações (editar, emitir,
+// reemitir), nunca por essa ação direta.
+export const MANUALLY_SETTABLE_QUOTE_STATUSES = [
+  "enviado",
+  "aprovado",
+  "recusado",
+  "expirado",
+] as const satisfies readonly QuoteStatus[];
+
 export const quoteSchema = z.object({
   id: z.uuid(),
   organization_id: z.uuid(),

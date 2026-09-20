@@ -20,6 +20,11 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="quotes">
+        <NativeTabs.Trigger.Label>Orçamentos</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="doc.text" md="description" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="customers">
         <NativeTabs.Trigger.Label>Clientes</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="person.2" md="people" />

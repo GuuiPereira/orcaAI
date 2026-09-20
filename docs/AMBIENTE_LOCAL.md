@@ -385,6 +385,31 @@ curl http://127.0.0.1:54321/functions/v1/attach-quote-pdf \
   -d "{\"quote_id\":\"$QUOTE\",\"version\":$VERSION}"
 ```
 
+### Histórico, busca e estados comerciais (Task 5 da Fase 2)
+
+Aba "Orçamentos" (`/quotes`) - lista com busca (número, texto original ou
+nome do cliente) e filtros de estado/período. Não precisa de nada especial
+pra rodar local, só a stack de sempre.
+
+`quote_events` passou a aceitar `insert` direto do membro (antes só o
+service role gravava, igual `quote_versions`) - mas só pros tipos de evento
+que o usuário pode mesmo disparar (`criado`, `enviado`, `aprovado`,
+`recusado`, `expirado`); `emitido`/`reemitido` continuam só via
+`issue-quote`. Testando a restrição direto no Postgres (mesma técnica do
+`next_quote_number` - `set role` + `set_config` simulando `auth.uid()`,
+porque isso é RLS de tabela normal, não a API do Storage):
+
+```bash
+docker exec supabase_db_orcaai psql -U postgres -d postgres -c "
+set role authenticated;
+select set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', true);
+insert into quote_events (quote_id, event_type, actor_user_id)
+  values ('44444444-4444-4444-8444-444444444444', 'enviado', '11111111-1111-4111-8111-111111111111');
+-- funciona; trocar 'enviado' por 'emitido' na linha acima deve falhar com
+-- 'new row violates row-level security policy'.
+"
+```
+
 ### Testando a `interpret-quote` localmente
 
 Essa function precisa de duas coisas além da stack local rodando: segredos de

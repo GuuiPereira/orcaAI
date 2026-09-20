@@ -4,8 +4,10 @@ import {
   calculateQuoteTotals,
   centsToReaisInput,
   formatCentsAsBRL,
+  MANUALLY_SETTABLE_QUOTE_STATUSES,
   parseReaisInputToCents,
   QUOTE_ITEM_TYPE_LABELS,
+  QUOTE_STATUS_LABELS,
 } from '@orcaai/shared';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -35,7 +37,14 @@ import { goBackOr } from '@/lib/navigation';
 import { getCurrentOrganization, getCurrentOrganizationId, type CurrentOrganization } from '@/lib/organizations';
 import { shareQuotePdf } from '@/lib/pdf-share';
 import { saveIssuedQuotePdf } from '@/lib/quote-pdf-storage';
-import { issueQuote, updateQuoteCustomer, type IssueQuoteItem } from '@/lib/quotes';
+import {
+  issueQuote,
+  listQuoteEvents,
+  markQuoteStatus,
+  updateQuoteCustomer,
+  type IssueQuoteItem,
+  type QuoteEvent,
+} from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
 
 // Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
@@ -56,6 +65,15 @@ const DISCOUNT_KIND_OPTIONS = [
   { value: 'fixed', label: 'Valor fixo' },
   { value: 'percentage', label: 'Percentual' },
 ];
+
+// RF-074: rótulos da linha do tempo - cobre tanto os event_type de
+// QUOTE_STATUS_LABELS (enviado/aprovado/recusado/expirado) quanto os que
+// não são um status de orçamento (criado/emitido/reemitido).
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  criado: 'Criado',
+  reemitido: 'Reemitido',
+  ...QUOTE_STATUS_LABELS,
+};
 
 // Modo de geração do PDF (decisão de 2026-08-01,
 // .tasks/fase-1-prova-do-nucleo.md item 6).
@@ -161,6 +179,8 @@ export default function QuoteEditorScreen() {
     currentVersion: number;
     issuedAt: string | null;
   }>({ number: null, status: 'rascunho', currentVersion: 0, issuedAt: null });
+  const [events, setEvents] = useState<QuoteEvent[]>([]);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // RF-006: quando a IA (ou o orçamento em branco, sem IA nenhuma) não
   // trouxe forma de pagamento/validade, cai nas condições padrão
@@ -224,6 +244,13 @@ export default function QuoteEditorScreen() {
           currentVersion: quote.current_version,
           issuedAt: quote.issued_at,
         });
+
+        // RF-074: linha do tempo - não deve travar o editor se falhar.
+        listQuoteEvents(quoteId)
+          .then((result) => {
+            if (!cancelled) setEvents(result);
+          })
+          .catch(() => {});
 
         if (quote.customer_id) {
           getCustomer(quote.customer_id)
@@ -583,6 +610,11 @@ export default function QuoteEditorScreen() {
         currentVersion: result.quote.current_version,
         issuedAt: result.quote.issued_at,
       });
+      // issue-quote grava "emitido"/"reemitido" em quote_events do lado do
+      // servidor (RF-074) - busca de novo pra refletir na linha do tempo.
+      listQuoteEvents(quoteId)
+        .then(setEvents)
+        .catch(() => {});
 
       // Task 6: gera e sobe o PDF dessa versão pro Storage - só se ainda não
       // tiver sido salvo (idempotente: reemitir sem mudar nada não deveria
@@ -610,6 +642,25 @@ export default function QuoteEditorScreen() {
       Alert.alert('Não foi possível emitir', error instanceof Error ? error.message : String(error));
     } finally {
       setIssuing(false);
+    }
+  }
+
+  // RF-073: reflete no app um estado que já aconteceu fora dele (o
+  // prestador mandou pelo WhatsApp, o cliente respondeu etc.) - não dispara
+  // nenhum envio de verdade.
+  async function handleMarkStatus(status: (typeof MANUALLY_SETTABLE_QUOTE_STATUSES)[number]) {
+    if (!quoteId) return;
+    setUpdatingStatus(true);
+    try {
+      await markQuoteStatus(quoteId, status);
+      setQuoteMeta((meta) => ({ ...meta, status }));
+      listQuoteEvents(quoteId)
+        .then(setEvents)
+        .catch(() => {});
+    } catch (error) {
+      Alert.alert('Não foi possível atualizar o estado', error instanceof Error ? error.message : String(error));
+    } finally {
+      setUpdatingStatus(false);
     }
   }
 
@@ -837,6 +888,44 @@ export default function QuoteEditorScreen() {
               </Button>
             </Card.Content>
           </Card>
+
+          {quoteMeta.number && (
+            <Card mode="outlined">
+              <Card.Content style={styles.cardContentGap}>
+                <Text variant="titleMedium">Estado comercial</Text>
+                <Text style={{ color: paperTheme.colors.onSurfaceVariant }}>
+                  Atual: {QUOTE_STATUS_LABELS[quoteMeta.status]}
+                </Text>
+                <View style={styles.chipRow}>
+                  {MANUALLY_SETTABLE_QUOTE_STATUSES.map((status) => (
+                    <Chip
+                      key={status}
+                      selected={quoteMeta.status === status}
+                      disabled={updatingStatus}
+                      onPress={() => handleMarkStatus(status)}>
+                      {QUOTE_STATUS_LABELS[status]}
+                    </Chip>
+                  ))}
+                </View>
+              </Card.Content>
+            </Card>
+          )}
+
+          {events.length > 0 && (
+            <Card mode="outlined">
+              <Card.Content style={styles.cardContentGap}>
+                <Text variant="titleMedium">Histórico</Text>
+                {events.map((event) => (
+                  <View key={event.id} style={styles.timelineRow}>
+                    <Text variant="bodyMedium">{EVENT_TYPE_LABELS[event.eventType] ?? event.eventType}</Text>
+                    <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+                      {new Date(event.createdAt).toLocaleString('pt-BR')}
+                    </Text>
+                  </View>
+                ))}
+              </Card.Content>
+            </Card>
+          )}
 
           <Card mode="outlined">
             <Card.Content style={styles.cardContentGap}>
@@ -1097,6 +1186,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.one,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   uncertainHelperText: {
     color: UNCERTAIN_ACCENT,
