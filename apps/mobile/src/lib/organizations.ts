@@ -161,6 +161,11 @@ export type CurrentOrganization = {
   contactPhone: string | null;
   contactEmail: string | null;
   address: string | null;
+  // RF-006: condições padrão configuradas no perfil - usadas como ponto de
+  // partida de um orçamento novo (ver quote/[quoteId]/index.tsx), nunca
+  // aqui pra exibição no PDF em si.
+  defaultPaymentTerms: string | null;
+  defaultValidityDays: number | null;
 };
 
 function formatOrganizationAddress(address: OrganizationAddress | null): string | null {
@@ -185,5 +190,7 @@ export async function getCurrentOrganization(): Promise<CurrentOrganization | nu
     contactPhone: profile.contactPhone,
     contactEmail: profile.contactEmail,
     address: formatOrganizationAddress(profile.address),
+    defaultPaymentTerms: profile.preferences.default_payment_terms,
+    defaultValidityDays: profile.preferences.default_validity_days,
   };
 }

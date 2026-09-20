@@ -108,6 +108,10 @@ function safeItemCents(raw: string): number | null {
   return cents < 0 ? 0 : cents;
 }
 
+function daysToString(days: number | null): string {
+  return days !== null ? String(days) : '';
+}
+
 export default function QuoteEditorScreen() {
   const paperTheme = usePaperTheme();
   const { quoteId } = useLocalSearchParams<{ quoteId: string }>();
@@ -145,7 +149,15 @@ export default function QuoteEditorScreen() {
     issuedAt: string | null;
   }>({ number: null, status: 'rascunho', currentVersion: 0, issuedAt: null });
 
-  function applyResult(result: AiInterpretationResult) {
+  // RF-006: quando a IA (ou o orçamento em branco, sem IA nenhuma) não
+  // trouxe forma de pagamento/validade, cai nas condições padrão
+  // cadastradas no perfil em vez de deixar o campo vazio - só na primeira
+  // vez que o orçamento é gerado (um orçamento já emitido hidrata de
+  // `quotes`/`quote_items`, não passa por aqui - ver `load` abaixo).
+  function applyResult(
+    result: AiInterpretationResult,
+    defaults?: { paymentTerms: string | null; validityDays: number | null },
+  ) {
     // RF-013/migração de cliente da IA: o texto extraído nunca vira um
     // registro paralelo - só uma sugestão pra criar/atualizar o cliente de
     // verdade (customers), avaliada contra o cliente já vinculado (ver
@@ -154,15 +166,12 @@ export default function QuoteEditorScreen() {
     setSuggestionDismissed(false);
     setItems(result.items.map((item) => itemFromResult(item, nextKey())));
     setCommercialTerms({
-      paymentTerms: result.commercial_terms.payment_terms ?? '',
+      paymentTerms: result.commercial_terms.payment_terms ?? defaults?.paymentTerms ?? '',
       estimatedDurationDays:
         result.commercial_terms.estimated_duration_days !== null
           ? String(result.commercial_terms.estimated_duration_days)
           : '',
-      validityDays:
-        result.commercial_terms.validity_days !== null
-          ? String(result.commercial_terms.validity_days)
-          : '',
+      validityDays: daysToString(result.commercial_terms.validity_days ?? defaults?.validityDays ?? null),
     });
     setWarnings(result.warnings);
   }
@@ -175,14 +184,18 @@ export default function QuoteEditorScreen() {
       setLoading(true);
       setErrorMessage(null);
       try {
-        getCurrentOrganization()
-          .then((org) => {
-            if (!cancelled) setOrganization(org);
-          })
-          .catch(() => {
-            // Falha ao buscar dados do prestador não deve travar o editor -
-            // só desabilita a geração do PDF até resolver.
-          });
+        // Aguardado (não é fire-and-forget) porque as condições padrão do
+        // perfil (RF-006) precisam estar disponíveis antes de decidir as
+        // condições comerciais de um orçamento novo, mais abaixo. Falha
+        // aqui não trava o editor - só desabilita a geração do PDF e os
+        // padrões até resolver.
+        const organization = await getCurrentOrganization().catch(() => null);
+        if (cancelled) return;
+        setOrganization(organization);
+        const commercialDefaults = {
+          paymentTerms: organization?.defaultPaymentTerms ?? null,
+          validityDays: organization?.defaultValidityDays ?? null,
+        };
 
         const { data: quote, error: quoteError } = await supabase
           .from('quotes')
@@ -272,7 +285,16 @@ export default function QuoteEditorScreen() {
           if (cancelled) return;
 
           if (interpretation?.status === 'concluido' && interpretation.result) {
-            applyResult(interpretation.result as AiInterpretationResult);
+            applyResult(interpretation.result as AiInterpretationResult, commercialDefaults);
+          } else {
+            // Orçamento novo, ainda sem interpretação nenhuma (ou o usuário
+            // abandonou a IA - RF-029) - condições comerciais começam com
+            // os padrões do perfil em vez de em branco.
+            setCommercialTerms((c) => ({
+              ...c,
+              paymentTerms: commercialDefaults.paymentTerms ?? '',
+              validityDays: daysToString(commercialDefaults.validityDays),
+            }));
           }
         }
       } catch (error) {
