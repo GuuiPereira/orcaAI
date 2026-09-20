@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { ActivityIndicator, Button, Text, TextInput, useTheme as usePaperTheme }
 
 import { Spacing } from '@/constants/theme';
 import { getCustomer, setCustomerArchived, updateCustomer, type Customer, type CustomerInput } from '@/lib/customers';
+import { goBackOr } from '@/lib/navigation';
 
 type FormState = {
   name: string;
@@ -89,7 +90,7 @@ export default function EditCustomerScreen() {
     setSaving(true);
     try {
       await updateCustomer(customerId, toInput(form));
-      router.back();
+      goBackOr('/customers');
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -173,7 +174,7 @@ export default function EditCustomerScreen() {
             {saveError && <Text style={{ color: paperTheme.colors.error }}>{saveError}</Text>}
 
             <View style={styles.navRow}>
-              <Button mode="outlined" onPress={() => router.back()} disabled={saving} style={styles.flexButton}>
+              <Button mode="outlined" onPress={() => goBackOr('/customers')} disabled={saving} style={styles.flexButton}>
                 Cancelar
               </Button>
               <Button mode="contained" onPress={handleSave} loading={saving} disabled={saving} style={styles.flexButton}>

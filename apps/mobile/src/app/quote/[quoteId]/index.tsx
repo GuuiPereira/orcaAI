@@ -7,7 +7,7 @@ import {
   parseReaisInputToCents,
   QUOTE_ITEM_TYPE_LABELS,
 } from '@orcaai/shared';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, KeyboardTypeOptions, Modal, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,6 +32,7 @@ import { PdfPreview } from '@/components/pdf-preview';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { createCustomer, getCustomer, updateCustomer, type Customer } from '@/lib/customers';
 import { getCurrentOrganization, type CurrentOrganization } from '@/lib/organizations';
+import { goBackOr } from '@/lib/navigation';
 import { shareQuotePdf } from '@/lib/pdf-share';
 import { issueQuote, updateQuoteCustomer } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
@@ -543,7 +544,7 @@ export default function QuoteEditorScreen() {
 
   const header = (
     <Appbar.Header elevated={false} style={{ backgroundColor: paperTheme.colors.background }}>
-      <Appbar.BackAction onPress={() => router.back()} />
+      <Appbar.BackAction onPress={() => goBackOr('/')} />
       <Appbar.Content title="Revisar orçamento" />
     </Appbar.Header>
   );
