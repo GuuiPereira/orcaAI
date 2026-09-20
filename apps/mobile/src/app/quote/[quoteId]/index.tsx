@@ -35,7 +35,7 @@ import { goBackOr } from '@/lib/navigation';
 import { getCurrentOrganization, getCurrentOrganizationId, type CurrentOrganization } from '@/lib/organizations';
 import { shareQuotePdf } from '@/lib/pdf-share';
 import { saveIssuedQuotePdf } from '@/lib/quote-pdf-storage';
-import { issueQuote, updateQuoteCustomer } from '@/lib/quotes';
+import { issueQuote, updateQuoteCustomer, type IssueQuoteItem } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
 
 // Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
@@ -111,6 +111,18 @@ function safeItemCents(raw: string): number | null {
 
 function daysToString(days: number | null): string {
   return days !== null ? String(days) : '';
+}
+
+// A quantidade do item é texto livre no editor (aceita vírgula decimal, só
+// pra exibição no PDF - PdfItem.quantity é string) - a emissão precisa do
+// valor numérico de verdade (quoteItemSchema.quantity), então convertemos
+// aqui. Valor inválido ou <= 0 vira null em vez de travar a emissão (mesmo
+// espírito de safeItemCents pra preço).
+function parseQuantity(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export default function QuoteEditorScreen() {
@@ -454,6 +466,9 @@ export default function QuoteEditorScreen() {
     ]);
   }
 
+  // Só pra exibição no PDF - `quantity` fica como texto (aceita o que o
+  // usuário digitou, com vírgula etc.). Emissão usa `toIssueItems` abaixo,
+  // com `quantity` numérica de verdade.
   function toPdfItems(): PdfItem[] {
     return items.map((item) => ({
       type: item.type,
@@ -463,6 +478,30 @@ export default function QuoteEditorScreen() {
       unit: item.unit || null,
       total_price_cents: safeItemCents(item.totalPriceReais),
     }));
+  }
+
+  // Emissão: descarta linhas totalmente em branco (sobra de "Adicionar
+  // item" nunca preenchido) e converte quantity pra número - itens que
+  // sobrarem ainda precisam de descrição (checado em handleIssuePress
+  // antes de chamar isso), senão o schema da function rejeita com 400.
+  function toIssueItems(): IssueQuoteItem[] {
+    return items
+      .filter(
+        (item) =>
+          item.description.trim() ||
+          item.category.trim() ||
+          item.quantity.trim() ||
+          item.unit.trim() ||
+          safeItemCents(item.totalPriceReais) !== null,
+      )
+      .map((item) => ({
+        type: item.type,
+        description: item.description.trim(),
+        category: item.category || null,
+        quantity: parseQuantity(item.quantity),
+        unit: item.unit || null,
+        total_price_cents: safeItemCents(item.totalPriceReais),
+      }));
   }
 
   function buildHtmlFor(mode: 'completo' | 'service' | 'material'): string | null {
@@ -516,14 +555,19 @@ export default function QuoteEditorScreen() {
 
   async function handleIssuePress() {
     if (!quoteId) return;
-    if (items.length === 0) {
+    const issueItems: IssueQuoteItem[] = toIssueItems();
+    if (issueItems.length === 0) {
       Alert.alert('Adicione itens', 'É preciso pelo menos um item para emitir o orçamento.');
+      return;
+    }
+    if (issueItems.some((item) => !item.description)) {
+      Alert.alert('Descrição obrigatória', 'Preencha a descrição de todos os itens antes de emitir.');
       return;
     }
     setIssuing(true);
     try {
       const result = await issueQuote(quoteId, {
-        items: toPdfItems(),
+        items: issueItems,
         discount,
         commercialTerms: {
           payment_terms: commercialTerms.paymentTerms || null,

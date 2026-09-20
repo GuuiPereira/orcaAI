@@ -1,4 +1,4 @@
-import type { AiInterpretationResult, CommercialTerms, Discount, PdfItem, QuoteStatus } from '@orcaai/shared';
+import type { AiInterpretationResult, CommercialTerms, Discount, QuoteItemType, QuoteStatus } from '@orcaai/shared';
 
 import { getCurrentOrganizationId } from './organizations';
 import { supabase } from './supabase';
@@ -102,13 +102,27 @@ export type IssueQuoteResult = {
   idempotent: boolean;
 };
 
+// Formato que a function espera de fato (quantity numérica) - diferente de
+// `PdfItem` (packages/shared), cujo `quantity` é string só pra exibição no
+// PDF (ex.: pode ter vírgula decimal). Confundir os dois já quebrou a
+// emissão de qualquer item com quantidade preenchida (400 "expected
+// number, received string").
+export type IssueQuoteItem = {
+  type: QuoteItemType;
+  description: string;
+  category: string | null;
+  quantity: number | null;
+  unit: string | null;
+  total_price_cents: number | null;
+};
+
 // Task 4 (numeração, emissão e versões imutáveis): itens/desconto/condições
 // só são gravados de verdade aqui - até a emissão ficam efêmeros no editor
 // (ver .tasks/fase-2-mvp-fechado.md). O backend recalcula os totais (regra
 // de negócio 6), nunca confia no que o app mandou.
 export async function issueQuote(
   quoteId: string,
-  payload: { items: PdfItem[]; discount: Discount | null; commercialTerms: CommercialTerms },
+  payload: { items: IssueQuoteItem[]; discount: Discount | null; commercialTerms: CommercialTerms },
 ): Promise<IssueQuoteResult> {
   const { data, error } = await supabase.functions.invoke('issue-quote', {
     body: {
