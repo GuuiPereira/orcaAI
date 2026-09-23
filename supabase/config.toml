@@ -476,3 +476,10 @@ enabled = true
 verify_jwt = true
 import_map = "./functions/attach-quote-pdf/deno.json"
 entrypoint = "./functions/attach-quote-pdf/index.ts"
+
+# Chamada por agendador com a chave secret (auth: 'secret'), não por usuário.
+[functions.check-ai-cost]
+enabled = true
+verify_jwt = false
+import_map = "./functions/check-ai-cost/deno.json"
+entrypoint = "./functions/check-ai-cost/index.ts"

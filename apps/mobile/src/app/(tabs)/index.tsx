@@ -9,6 +9,7 @@ import { BottomTabInset, MaxContentWidth, Spacing, WebTopBarInset } from '@/cons
 import { useQuoteDraft } from '@/hooks/use-quote-draft';
 import type { Customer } from '@/lib/customers';
 import { createQuoteWithText, interpretQuote } from '@/lib/quotes';
+import { reportError } from '@/lib/monitoring';
 
 function draftStatusLabel(status: ReturnType<typeof useQuoteDraft>['status']) {
   switch (status) {
@@ -44,6 +45,7 @@ export default function NewQuoteScreen() {
         result.questions.length > 0 ? `/quote/${quote.id}/questions` : `/quote/${quote.id}`,
       );
     } catch (error) {
+      reportError(error, 'interpret-quote');
       Alert.alert(
         'Não foi possível interpretar o texto',
         error instanceof Error ? error.message : String(error),

@@ -47,6 +47,7 @@ import {
   type QuoteEvent,
 } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
+import { reportError } from '@/lib/monitoring';
 
 // Cor de destaque para campos incertos/ausentes (RF-024, RF-025) e para
 // erros de validação (RF-049). Não faz parte da paleta base do app - são
@@ -580,6 +581,7 @@ export default function QuoteEditorScreen() {
       const html = buildHtmlFor(pdfMode);
       if (html) setPreviewHtml(html);
     } catch (error) {
+      reportError(error, 'pdf-generate');
       Alert.alert(
         'Não foi possível gerar o PDF',
         error instanceof Error ? error.message : String(error),
@@ -638,6 +640,7 @@ export default function QuoteEditorScreen() {
             await saveIssuedQuotePdf(html, { organizationId, quoteId, version: result.quote.current_version });
           }
         } catch (pdfError) {
+          reportError(pdfError, 'pdf-store');
           pdfWarning = pdfError instanceof Error ? pdfError.message : String(pdfError);
         }
       }
@@ -648,6 +651,7 @@ export default function QuoteEditorScreen() {
           (pdfWarning ? `\n\nO PDF não foi salvo: ${pdfWarning}` : ''),
       );
     } catch (error) {
+      reportError(error, 'issue-quote');
       Alert.alert('Não foi possível emitir', error instanceof Error ? error.message : String(error));
     } finally {
       setIssuing(false);
@@ -679,6 +683,7 @@ export default function QuoteEditorScreen() {
     try {
       await shareQuotePdf(previewHtml);
     } catch (error) {
+      reportError(error, 'pdf-share');
       Alert.alert(
         'Não foi possível compartilhar',
         error instanceof Error ? error.message : String(error),

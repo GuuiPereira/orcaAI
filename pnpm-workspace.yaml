@@ -2,5 +2,6 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  '@sentry/cli': true
   dtrace-provider: true
   unrs-resolver: true

@@ -9,16 +9,25 @@ import { PaperProvider } from 'react-native-paper';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { paperDarkTheme, paperLightTheme } from '@/constants/paper-theme';
 import { useAuthGate } from '@/hooks/use-auth-gate';
+import { useSession } from '@/hooks/use-session';
 import { useTheme } from '@/hooks/use-theme';
+import { initMonitoring, setMonitoringUser, wrapRootComponent } from '@/lib/monitoring';
+
+initMonitoring();
 
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+function RootLayout() {
   const colorScheme = useColorScheme();
   const theme = useTheme();
   const status = useAuthGate();
   const segments = useSegments();
   const router = useRouter();
+  const { session } = useSession();
+
+  useEffect(() => {
+    setMonitoringUser(session?.user.id ?? null);
+  }, [session]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -54,3 +63,5 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
+export default wrapRootComponent(RootLayout);

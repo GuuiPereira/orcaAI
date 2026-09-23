@@ -8,6 +8,7 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { interpretQuote, updateQuoteSourceText } from '@/lib/quotes';
 import { supabase } from '@/lib/supabase';
+import { reportError } from '@/lib/monitoring';
 import { useTheme } from '@/hooks/use-theme';
 
 // Tela dedicada às perguntas da IA (RF-026/028). Só permite reprocessar
@@ -105,6 +106,7 @@ export default function QuoteQuestionsScreen() {
       await interpretQuote(quoteId, { forceReprocess: true });
       router.replace(`/quote/${quoteId}`);
     } catch (error) {
+      reportError(error, 'interpret-quote', { reprocess: 'true' });
       Alert.alert(
         'Não foi possível reprocessar',
         error instanceof Error ? error.message : String(error),

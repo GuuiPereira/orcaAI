@@ -1,6 +1,7 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { z } from "zod";
+import { withErrorReporting } from "../_shared/sentry.ts";
 
 // .tasks/fase-2-mvp-fechado.md task 6 - upload do PDF emitido pro Storage.
 //
@@ -21,7 +22,7 @@ const requestSchema = z.object({
 });
 
 export default {
-  fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "user" }, withErrorReporting("attach-quote-pdf", async (req, ctx) => {
     if (req.method !== "POST") {
       return Response.json({ message: "method not allowed" }, { status: 405 });
     }
@@ -92,5 +93,5 @@ export default {
     }
 
     return Response.json({ pdf_path: path, already_attached: false });
-  }),
+  })),
 };

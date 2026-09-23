@@ -1,6 +1,7 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { z } from "zod";
+import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   calculateQuoteTotals,
   commercialTermsSchema,
@@ -41,7 +42,7 @@ function addDays(date: Date, days: number): string {
 }
 
 export default {
-  fetch: withSupabase({ auth: "user" }, async (req, ctx) => {
+  fetch: withSupabase({ auth: "user" }, withErrorReporting("issue-quote", async (req, ctx) => {
     if (req.method !== "POST") {
       return Response.json({ message: "method not allowed" }, { status: 405 });
     }
@@ -235,5 +236,5 @@ export default {
     });
 
     return Response.json({ quote: updatedQuote, version: insertedVersion, idempotent: false });
-  }),
+  })),
 };

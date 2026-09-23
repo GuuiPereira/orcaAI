@@ -385,6 +385,73 @@ curl http://127.0.0.1:54321/functions/v1/attach-quote-pdf \
   -d "{\"quote_id\":\"$QUOTE\",\"version\":$VERSION}"
 ```
 
+### Monitoramento com Sentry e métricas (Task 8 da Fase 2)
+
+**Ligar o Sentry (opcional - sem DSN tudo fica inerte, nada é enviado):**
+1. No sentry.io, crie um projeto **React Native** (app) e outro **Deno**
+   (functions), ou um só pros dois - o DSN aparece em *Settings > Client
+   Keys*. O plano gratuito basta pro teste fechado.
+2. App: `EXPO_PUBLIC_SENTRY_DSN=<dsn>` em `apps/mobile/.env.local` (e reinicie
+   o Expo com `--clear` - variáveis `EXPO_PUBLIC_*` entram no bundle).
+3. Functions: `SENTRY_DSN=<dsn>` em `supabase/functions/interpret-quote/
+   .env.local` - é esse o arquivo que `pnpm run dev` passa pra **todas** as
+   functions (`--env-file`). Reinicie o `pnpm run dev`.
+4. Sentry nativo (crash do celular) **só existe num build novo** (`eas
+   build`) - o SDK tem módulo nativo. No navegador funciona direto.
+5. Builds do EAS: pra subir source maps, `SENTRY_AUTH_TOKEN` como secret do
+   EAS e `organization`/`project` nas opções do plugin
+   `@sentry/react-native/expo` em `app.json` (hoje sem opções - só o SDK).
+
+**Privacidade (RNF-008):** tudo que sai passa por `sanitizeEvent`/
+`sanitizeBreadcrumb` (`packages/shared/src/monitoring/sanitize.ts`, com
+testes): só o ID técnico do usuário, método+caminho da requisição, URLs sem
+query string (as do Supabase carregam termos de busca de cliente), sem
+breadcrumbs de `console`, sem corpo de requisição, e e-mail/telefone/CPF/CNPJ
+removidos das mensagens de erro. Sem replay de sessão, sem tracing, sem PII
+automática. **Cuidado ao mexer:** o Sentry também anexa linhas do código-fonte
+ao redor do erro - nunca coloque dado de cliente literal no código.
+
+**Testar sem conta (Sentry falso):** um servidor HTTP que grava o que recebe
+serve de DSN (`http://chave@127.0.0.1:9911/1` no app; nas functions do
+runtime local o host é o IP da máquina, não `127.0.0.1`, porque roda em
+container). Foi assim que validei: no navegador, buscar um cliente e estourar
+um erro com e-mail na mensagem → 1 evento, sem o nome buscado, sem a query
+nas URLs; nas functions, um 500 tratado e uma exceção com dados sensíveis →
+2 eventos, 0 vazamentos. `deno` não está instalado na máquina; pra rodar o
+helper `supabase/functions/_shared/sentry.ts` fora do runtime do Supabase,
+`npm i deno` numa pasta temporária (o Deno bloqueia versões de pacote com
+menos de 24h - por isso o `@sentry/deno` está fixado em `~10.74.0`, não na
+11.0.0 recém-lançada).
+
+**Métricas (SQL, só o operador):** views `metrics_ai_daily` (custo em
+centavos de **dólar**, falhas, schema inválido, por versão de prompt/
+modelo), `metrics_funnel_daily` (criado → interpretado → emitido → enviado/
+aprovado...) e `metrics_pdf_coverage`. Só `service_role` lê (agregam todas
+as organizações e ignoram RLS):
+
+```bash
+docker exec supabase_db_orcaai psql -U postgres -d postgres -c "select * from metrics_ai_daily;"
+```
+
+**Alerta de custo:** function `check-ai-cost` (chave secret, não JWT de
+usuário): compara o custo do dia com `AI_DAILY_COST_LIMIT_CENTS` (centavos de
+dólar) e manda um evento `alert=ai-cost` pro Sentry se passou - crie lá uma
+regra de alerta por e-mail pra essa tag. **Ainda não está agendada:** no
+projeto hospedado (task 9) agende com o cron do Supabase (`pg_cron` +
+`pg_net`, ou o painel de Cron Jobs) chamando `POST /functions/v1/check-ai-cost`
+com o header `apikey: <secret key>`. Testando local:
+
+```bash
+SECRET=$(pnpm exec supabase status -o json | python3 -c "import sys,json;print(json.load(sys.stdin)['SECRET_KEY'])")
+curl http://127.0.0.1:54321/functions/v1/check-ai-cost -H "apikey: $SECRET"
+```
+
+**pnpm:** instalar o `@sentry/react-native` pediu aprovar o build script do
+`@sentry/cli` (binário que sobe source maps) - está `true` em
+`pnpm-workspace.yaml`. Se o pnpm pedir de novo, o contorno do store
+(`--store-dir`) da seção "Unexpected store location" vale também pro
+`pnpm install`.
+
 ### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
 
 Botão "Ver prévia do orçamento" no último passo do onboarding e no Perfil

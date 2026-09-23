@@ -1,10 +1,11 @@
-const { getDefaultConfig } = require('expo/metro-config');
+const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 const path = require('node:path');
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
-const config = getDefaultConfig(projectRoot);
+// getSentryExpoConfig = getDefaultConfig do Expo + debug IDs pros source maps.
+const config = getSentryExpoConfig(projectRoot);
 
 // Metro precisa enxergar o resto do monorepo pnpm (packages/shared) para
 // resolver @orcaai/shared, que fica fora de apps/mobile.
