@@ -186,9 +186,12 @@ export type CurrentOrganization = {
   // aqui pra exibição no PDF em si.
   defaultPaymentTerms: string | null;
   defaultValidityDays: number | null;
+  // Caminho do logo no Storage (RF-005) - o PDF embute a imagem, ver
+  // lib/storage.ts getOrganizationLogoDataUri.
+  logoPath: string | null;
 };
 
-function formatOrganizationAddress(address: OrganizationAddress | null): string | null {
+export function formatOrganizationAddress(address: OrganizationAddress | null): string | null {
   if (!address) return null;
   const parts = [
     [address.street, address.number].filter(Boolean).join(', '),
@@ -212,5 +215,6 @@ export async function getCurrentOrganization(): Promise<CurrentOrganization | nu
     address: formatOrganizationAddress(profile.address),
     defaultPaymentTerms: profile.preferences.default_payment_terms,
     defaultValidityDays: profile.preferences.default_validity_days,
+    logoPath: profile.logoPath,
   };
 }

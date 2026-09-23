@@ -385,6 +385,24 @@ curl http://127.0.0.1:54321/functions/v1/attach-quote-pdf \
   -d "{\"quote_id\":\"$QUOTE\",\"version\":$VERSION}"
 ```
 
+### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
+
+Botão "Ver prévia do orçamento" no último passo do onboarding e no Perfil
+(`/profile`): abre um orçamento de exemplo (cliente e itens fictícios, aviso
+"EXEMPLO") com os dados do prestador. No Perfil a prévia usa o que está no
+formulário agora, mesmo sem salvar, e o logo atual.
+
+O logo entra no PDF como imagem embutida (data URI) - o app baixa pela URL
+assinada e converte, então o `expo-print` não depende de rede. Testar no
+navegador: subir um logo em `/profile` e abrir a prévia; o iframe da prévia
+(`page.locator('iframe').first().getAttribute('srcdoc')` no Playwright) deve
+conter `<img class="logo" src="data:image/...`. Se o download do logo
+falhar, o PDF sai só sem a imagem.
+
+**Dica de teste:** se o Expo web não estiver rodando, `pnpm --filter
+@orcaai/mobile exec expo start --web --port 8081` sobe só ele (o `pnpm run
+dev` sobe tudo junto).
+
 ### Histórico, busca e estados comerciais (Task 5 da Fase 2)
 
 Aba "Orçamentos" (`/quotes`) - lista com busca (número, texto original ou

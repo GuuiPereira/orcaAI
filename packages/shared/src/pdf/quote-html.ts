@@ -16,6 +16,10 @@ export type PdfOrganization = {
   contactPhone: string | null;
   contactEmail: string | null;
   address: string | null;
+  // Logo já embutido como data URI (o bucket é privado e o PDF é gerado
+  // localmente - uma URL remota não é confiável no expo-print). Sem logo,
+  // o cabeçalho fica igual ao de antes.
+  logoDataUri?: string | null;
 };
 
 export type PdfCustomer = {
@@ -50,6 +54,8 @@ export type BuildQuoteHtmlInput = {
   discount: Discount | null;
   commercialTerms: PdfCommercialTerms;
   issuedAt: Date;
+  // Aviso extra exibido no topo (ex.: "EXEMPLO" na prévia do perfil).
+  notice?: string | null;
 };
 
 const MODE_NOTICE: Record<PdfMode, string | null> = {
@@ -178,6 +184,12 @@ export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
     .map(escapeHtml)
     .join(" · ");
 
+  // Só aceita data URI de imagem - nunca injeta uma string arbitrária no src.
+  const logoHtml =
+    input.organization.logoDataUri && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(input.organization.logoDataUri)
+      ? `<img class="logo" src="${input.organization.logoDataUri}" alt="" />`
+      : "";
+
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -189,6 +201,8 @@ export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
   h2 { font-size: 15px; margin: 24px 0 8px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 16px; margin-bottom: 16px; }
   .header-right { text-align: right; }
+  .header-left { display: flex; align-items: flex-start; gap: 12px; }
+  .logo { max-height: 64px; max-width: 120px; object-fit: contain; }
   .muted { color: #555; }
   .notice { background: #f5f5f5; padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 12px; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -200,13 +214,16 @@ export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
 </head>
 <body>
   <div class="header">
-    <div>
+    <div class="header-left">
+      ${logoHtml}
+      <div>
       <h1>${escapeHtml(input.organization.tradeName)}</h1>
       ${input.organization.legalName ? `<div class="muted">${escapeHtml(input.organization.legalName)}</div>` : ""}
       ${input.organization.taxId ? `<div class="muted">${escapeHtml(input.organization.taxId)}</div>` : ""}
       ${input.organization.contactPhone ? `<div class="muted">${escapeHtml(input.organization.contactPhone)}</div>` : ""}
       ${input.organization.contactEmail ? `<div class="muted">${escapeHtml(input.organization.contactEmail)}</div>` : ""}
       ${input.organization.address ? `<div class="muted">${escapeHtml(input.organization.address)}</div>` : ""}
+      </div>
     </div>
     <div class="header-right">
       <h1>ORÇAMENTO</h1>
@@ -216,6 +233,7 @@ export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
 
   <div class="notice">Este documento apresenta uma estimativa de valores e não é um documento fiscal.</div>
   ${modeNotice ? `<div class="notice">${modeNotice}</div>` : ""}
+  ${input.notice ? `<div class="notice">${escapeHtml(input.notice)}</div>` : ""}
 
   <h2>Cliente</h2>
   <p>

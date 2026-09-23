@@ -1,4 +1,4 @@
-import { decode } from 'base64-arraybuffer';
+import { decode, encode } from 'base64-arraybuffer';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 
@@ -63,4 +63,29 @@ export async function getOrganizationLogoUrl(logoPath: string | null): Promise<s
   const { data, error } = await supabase.storage.from(LOGO_BUCKET).createSignedUrl(logoPath, 3600);
   if (error) return null;
   return data.signedUrl;
+}
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+  png: 'image/png',
+  webp: 'image/webp',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+};
+
+// Logo embutido no PDF como data URI: o bucket é privado e o expo-print
+// gera o arquivo localmente, então não dá pra depender de uma URL remota
+// carregando a tempo (nem da expiração dela). Devolve null se não tiver
+// logo ou se qualquer passo falhar - o PDF só sai sem a imagem, nunca quebra.
+export async function getOrganizationLogoDataUri(logoPath: string | null): Promise<string | null> {
+  const url = await getOrganizationLogoUrl(logoPath);
+  if (!url || !logoPath) return null;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const mimeType = MIME_BY_EXTENSION[logoPath.split('.').pop()?.toLowerCase() ?? ''];
+    if (!mimeType) return null;
+    return `data:${mimeType};base64,${encode(await response.arrayBuffer())}`;
+  } catch {
+    return null;
+  }
 }

@@ -20,7 +20,9 @@ import {
   type OrganizationProfile,
   type OrganizationProfileInput,
 } from '@/lib/organizations';
-import { getOrganizationLogoUrl, pickAndUploadOrganizationLogo } from '@/lib/storage';
+import { ProfilePreviewModal } from '@/components/profile-preview-modal';
+import { buildProfilePreviewHtml } from '@/lib/quote-preview';
+import { getOrganizationLogoDataUri, getOrganizationLogoUrl, pickAndUploadOrganizationLogo } from '@/lib/storage';
 
 type FormState = {
   tradeName: string;
@@ -106,6 +108,8 @@ export default function ProfileScreen() {
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -136,6 +140,19 @@ export default function ProfileScreen() {
       cancelled = true;
     };
   }, []);
+
+  // Prévia com o que está no formulário agora (mesmo sem salvar) e o logo
+  // atual - exemplo fictício, ver lib/quote-preview.ts.
+  async function handleShowPreview() {
+    if (!form) return;
+    setLoadingPreview(true);
+    try {
+      const logoDataUri = await getOrganizationLogoDataUri(logoPath);
+      setPreviewHtml(buildProfilePreviewHtml(toProfile(form), logoDataUri));
+    } finally {
+      setLoadingPreview(false);
+    }
+  }
 
   // RF-005 (task 6): upload acontece na hora da escolha, sem esperar o
   // "Salvar" do resto do formulário - mesmo padrão do vínculo de cliente no
@@ -318,6 +335,9 @@ export default function ProfileScreen() {
             )}
             {saveError && <Text style={{ color: paperTheme.colors.error }}>{saveError}</Text>}
 
+            <Button mode="outlined" icon="file-eye-outline" onPress={handleShowPreview} loading={loadingPreview} disabled={loadingPreview}>
+              Ver prévia do orçamento
+            </Button>
             <Button mode="contained" onPress={handleSave} loading={saving} disabled={saving}>
               Salvar
             </Button>
@@ -326,6 +346,7 @@ export default function ProfileScreen() {
 
         <Button onPress={() => signOut()}>Sair</Button>
       </SafeAreaView>
+      <ProfilePreviewModal html={previewHtml} onClose={() => setPreviewHtml(null)} />
     </ScrollView>
   );
 }

@@ -179,3 +179,37 @@ describe("buildQuoteHtml - summary with unpriced items", () => {
     expect(html).toContain("200,00");
   });
 });
+
+describe("buildQuoteHtml - logo and extra notice", () => {
+  const logo = "data:image/png;base64,iVBORw0KGgo=";
+
+  it("renders the logo image in the header when a data URI is given", () => {
+    const html = buildQuoteHtml({
+      ...baseInput,
+      items,
+      mode: "completo",
+      organization: { ...baseInput.organization, logoDataUri: logo },
+    });
+    expect(html).toContain(`<img class="logo" src="${logo}"`);
+  });
+
+  it("omits the image when there is no logo", () => {
+    const html = buildQuoteHtml({ ...baseInput, items, mode: "completo" });
+    expect(html).not.toContain("<img");
+  });
+
+  it("refuses anything that is not a base64 image data URI", () => {
+    const html = buildQuoteHtml({
+      ...baseInput,
+      items,
+      mode: "completo",
+      organization: { ...baseInput.organization, logoDataUri: 'https://evil.example/x.png" onerror="alert(1)' },
+    });
+    expect(html).not.toContain("<img");
+  });
+
+  it("shows and escapes the extra notice", () => {
+    const html = buildQuoteHtml({ ...baseInput, items, mode: "completo", notice: "EXEMPLO <b>" });
+    expect(html).toContain("EXEMPLO &lt;b&gt;");
+  });
+});

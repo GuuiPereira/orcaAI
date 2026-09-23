@@ -36,6 +36,7 @@ import { createCustomer, getCustomer, updateCustomer, type Customer } from '@/li
 import { goBackOr } from '@/lib/navigation';
 import { getCurrentOrganization, getCurrentOrganizationId, type CurrentOrganization } from '@/lib/organizations';
 import { shareQuotePdf } from '@/lib/pdf-share';
+import { getOrganizationLogoDataUri } from '@/lib/storage';
 import { saveIssuedQuotePdf } from '@/lib/quote-pdf-storage';
 import {
   issueQuote,
@@ -169,6 +170,7 @@ export default function QuoteEditorScreen() {
   const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
   const [organization, setOrganization] = useState<CurrentOrganization | null>(null);
+  const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
   const [pdfMode, setPdfMode] = useState<PdfGenerationMode>('completo');
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -225,6 +227,13 @@ export default function QuoteEditorScreen() {
         const organization = await getCurrentOrganization().catch(() => null);
         if (cancelled) return;
         setOrganization(organization);
+        // Logo embutido no PDF (RF-005) - não trava o editor se falhar, o
+        // documento só sai sem a imagem.
+        getOrganizationLogoDataUri(organization?.logoPath ?? null)
+          .then((uri) => {
+            if (!cancelled) setLogoDataUri(uri);
+          })
+          .catch(() => {});
         const commercialDefaults = {
           paymentTerms: organization?.defaultPaymentTerms ?? null,
           validityDays: organization?.defaultValidityDays ?? null,
@@ -535,7 +544,7 @@ export default function QuoteEditorScreen() {
     if (!organization) return null;
     return buildQuoteHtml({
       mode,
-      organization,
+      organization: { ...organization, logoDataUri },
       customer: {
         name: linkedCustomer?.name ?? null,
         phone: linkedCustomer?.phone ?? null,

@@ -7,6 +7,8 @@ import { Spacing } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
 import { notifyOrganizationChanged } from '@/hooks/use-auth-gate';
 import { createOrganization, type OrganizationProfileInput } from '@/lib/organizations';
+import { ProfilePreviewModal } from '@/components/profile-preview-modal';
+import { buildProfilePreviewHtml } from '@/lib/quote-preview';
 import { supabase } from '@/lib/supabase';
 
 type FormState = {
@@ -67,6 +69,7 @@ export default function OnboardingScreen() {
   const paperTheme = usePaperTheme();
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => ({
     tradeName: '',
@@ -303,6 +306,16 @@ export default function OnboardingScreen() {
           </Text>
         )}
 
+        {isLastStep && (
+          <Button
+            mode="outlined"
+            icon="file-eye-outline"
+            onPress={() => setPreviewHtml(buildProfilePreviewHtml(toProfile(form), null))}
+            disabled={submitting}>
+            Ver prévia do orçamento
+          </Button>
+        )}
+
         <View style={styles.navRow}>
           {!isFirstStep && (
             <Button mode="outlined" onPress={handleBack} disabled={submitting}>
@@ -322,6 +335,8 @@ export default function OnboardingScreen() {
 
         <Button onPress={() => signOut()}>Sair</Button>
       </View>
+
+      <ProfilePreviewModal html={previewHtml} onClose={() => setPreviewHtml(null)} />
     </SafeAreaView>
   );
 }
