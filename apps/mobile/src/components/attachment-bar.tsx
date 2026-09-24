@@ -7,21 +7,13 @@ import {
   useAudioRecorderState,
   type RecordingOptions,
 } from 'expo-audio';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform, StyleSheet, View } from 'react-native';
 import { Button, Text, useTheme as usePaperTheme } from 'react-native-paper';
 
 import { Spacing } from '@/constants/theme';
-import {
-  ExtractionUserError,
-  extractTextFromAudio,
-  extractTextFromImages,
-  reduceImage,
-  type ExtractionKind,
-  type ExtractionResult,
-} from '@/lib/input-extraction';
+import { canAddAttachment, newAttachmentId, type Attachment } from '@/lib/input-extraction';
 import { reportError } from '@/lib/monitoring';
 
 // Fala: mono e taxa baixa bastam (e o arquivo fica pequeno - 2 min de AAC mono
@@ -34,16 +26,10 @@ const SPEECH_RECORDING: RecordingOptions = {
   bitRate: 32000,
 };
 
-export type ExtractedInput = {
-  kind: ExtractionKind;
-  result: ExtractionResult;
-  // Miniaturas (só imagem): ficam no aparelho pra comparar com o texto.
-  thumbnails: string[];
-};
-
 type Props = {
+  attachments: Attachment[];
   disabled?: boolean;
-  onExtracted: (input: ExtractedInput) => void;
+  onAdd: (attachments: Attachment[]) => void;
 };
 
 function formatClock(totalSeconds: number) {
@@ -52,38 +38,27 @@ function formatClock(totalSeconds: number) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-// Fase 4A: as duas formas novas de entrada (falar e fotografar/enviar imagem).
-// Só produzem TEXTO, entregue ao pai via onExtracted - quem revisa é o usuário.
-export function InputExtractionBar({ disabled, onExtracted }: Props) {
+// Fase 4A: gravar ou escolher imagem só ANEXA (lista abaixo, com ouvir/ver/
+// excluir). Nada é enviado aqui - a leitura acontece no "Continuar".
+export function AttachmentBar({ attachments, disabled, onAdd }: Props) {
   const paperTheme = usePaperTheme();
   const recorder = useAudioRecorder(SPEECH_RECORDING);
   const recorderState = useAudioRecorderState(recorder);
-  const [phase, setPhase] = useState<'idle' | 'recording' | 'reading'>('idle');
-  const [readingLabel, setReadingLabel] = useState('');
+  const [recording, setRecording] = useState(false);
   const startedAt = useRef(0);
   const finishing = useRef(false);
 
   const seconds = recorderState.durationMillis / 1000;
+  const canAddAudio = canAddAttachment(attachments, 'audio');
+  const canAddImage = canAddAttachment(attachments, 'image');
 
   // Corta sozinho no limite (o servidor recusa acima de 2 min).
   useEffect(() => {
-    if (phase === 'recording' && seconds >= MAX_AUDIO_SECONDS) {
+    if (recording && seconds >= MAX_AUDIO_SECONDS) {
       void finishRecording();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, seconds]);
-
-  function showFailure(error: unknown, area: string) {
-    if (error instanceof ExtractionUserError) {
-      Alert.alert('Não deu para ler', error.message);
-      return;
-    }
-    reportError(error, area);
-    Alert.alert(
-      'Não foi possível ler agora',
-      'Verifique sua conexão e tente de novo - ou digite o texto do orçamento.',
-    );
-  }
+  }, [recording, seconds]);
 
   async function startRecording() {
     try {
@@ -100,10 +75,10 @@ export function InputExtractionBar({ disabled, onExtracted }: Props) {
       recorder.record();
       startedAt.current = Date.now();
       finishing.current = false;
-      setPhase('recording');
+      setRecording(true);
     } catch (error) {
       reportError(error, 'audio-record');
-      setPhase('idle');
+      setRecording(false);
       Alert.alert('Não foi possível gravar', 'Tente de novo - ou digite o texto do orçamento.');
     }
   }
@@ -126,49 +101,34 @@ export function InputExtractionBar({ disabled, onExtracted }: Props) {
     } catch (error) {
       reportError(error, 'audio-record');
     }
-    setPhase('idle');
+    setRecording(false);
   }
 
   async function finishRecording() {
-    let recording: { uri: string; durationMs: number } | null;
     try {
-      recording = await stopRecorder();
+      const result = await stopRecorder();
+      if (result) {
+        onAdd([{ id: newAttachmentId(), kind: 'audio', uri: result.uri, durationMs: result.durationMs }]);
+      }
     } catch (error) {
       reportError(error, 'audio-record');
-      setPhase('idle');
       Alert.alert('Não foi possível gravar', 'Tente de novo - ou digite o texto do orçamento.');
-      return;
-    }
-    if (!recording) return;
-
-    setReadingLabel('Transcrevendo o áudio…');
-    setPhase('reading');
-    try {
-      const result = await extractTextFromAudio(recording);
-      onExtracted({ kind: 'audio', result, thumbnails: [] });
-    } catch (error) {
-      showFailure(error, 'audio-extract');
     } finally {
-      setPhase('idle');
+      setRecording(false);
     }
   }
 
-  async function readImages(assets: ImagePicker.ImagePickerAsset[]) {
-    if (assets.length === 0) return;
-    setReadingLabel('Lendo a imagem…');
-    setPhase('reading');
-    try {
-      const uris = [];
-      for (const asset of assets.slice(0, MAX_IMAGES)) {
-        uris.push(await reduceImage({ uri: asset.uri, width: asset.width, height: asset.height }));
-      }
-      const result = await extractTextFromImages(uris);
-      onExtracted({ kind: 'image', result, thumbnails: uris });
-    } catch (error) {
-      showFailure(error, 'image-extract');
-    } finally {
-      setPhase('idle');
-    }
+  function addImages(assets: ImagePicker.ImagePickerAsset[]) {
+    const room = MAX_IMAGES - attachments.filter((attachment) => attachment.kind === 'image').length;
+    onAdd(
+      assets.slice(0, Math.max(room, 0)).map((asset) => ({
+        id: newAttachmentId(),
+        kind: 'image' as const,
+        uri: asset.uri,
+        width: asset.width,
+        height: asset.height,
+      })),
+    );
   }
 
   async function takePhoto() {
@@ -181,20 +141,21 @@ export function InputExtractionBar({ disabled, onExtracted }: Props) {
       return;
     }
     const picked = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 });
-    if (!picked.canceled) await readImages(picked.assets);
+    if (!picked.canceled) addImages(picked.assets);
   }
 
   async function pickFromGallery() {
+    const room = MAX_IMAGES - attachments.filter((attachment) => attachment.kind === 'image').length;
     const picked = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
-      selectionLimit: MAX_IMAGES,
+      selectionLimit: Math.max(room, 1),
       quality: 1,
     });
-    if (!picked.canceled) await readImages(picked.assets);
+    if (!picked.canceled) addImages(picked.assets);
   }
 
-  if (phase === 'recording') {
+  if (recording) {
     return (
       <View style={styles.row}>
         <View style={[styles.recordingBadge, { backgroundColor: paperTheme.colors.errorContainer }]}>
@@ -213,37 +174,31 @@ export function InputExtractionBar({ disabled, onExtracted }: Props) {
     );
   }
 
-  if (phase === 'reading') {
-    return (
-      <Text variant="bodyMedium" style={{ color: paperTheme.colors.onSurfaceVariant }}>
-        {readingLabel}
-      </Text>
-    );
-  }
-
   return (
     <View style={styles.row}>
-      <Button mode="outlined" icon="microphone" onPress={() => void startRecording()} disabled={disabled}>
+      <Button
+        mode="outlined"
+        icon="microphone"
+        onPress={() => void startRecording()}
+        disabled={disabled || !canAddAudio}>
         Falar
       </Button>
       {Platform.OS !== 'web' && (
-        <Button mode="outlined" icon="camera" onPress={() => void takePhoto()} disabled={disabled}>
+        <Button
+          mode="outlined"
+          icon="camera"
+          onPress={() => void takePhoto()}
+          disabled={disabled || !canAddImage}>
           Foto
         </Button>
       )}
-      <Button mode="outlined" icon="image" onPress={() => void pickFromGallery()} disabled={disabled}>
+      <Button
+        mode="outlined"
+        icon="image"
+        onPress={() => void pickFromGallery()}
+        disabled={disabled || !canAddImage}>
         Imagem
       </Button>
-    </View>
-  );
-}
-
-export function ExtractionThumbnails({ uris }: { uris: string[] }) {
-  return (
-    <View style={styles.row}>
-      {uris.map((uri) => (
-        <Image key={uri} source={{ uri }} style={styles.thumbnail} contentFit="cover" />
-      ))}
     </View>
   );
 }
@@ -267,10 +222,5 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-  },
-  thumbnail: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
   },
 });

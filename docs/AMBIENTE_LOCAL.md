@@ -682,13 +682,17 @@ a exclusão com a sua conta real** - use uma conta Google de teste.
 ### Entrada por áudio e por imagem (Fase 4A)
 
 Na tela "Novo orçamento" há três jeitos de chegar ao texto: **digitar** (o
-padrão, igual a antes), **Falar** (grava e transcreve) e **Imagem** (foto/print
-com o texto do orçamento; no aparelho há também **Foto**, da câmera). Áudio e
-imagem só produzem **texto**: ele cai no mesmo campo, aparece um card
-"confira antes de continuar" (miniaturas da imagem e **valores em destaque** -
-inclusive por extenso, "dois mil e oitocentos reais") e o botão **Continuar
-fica travado até tocar em "Conferi o texto"** (RF-027: preço mal ouvido/lido
-não pode passar batido). Uma nova leitura **acrescenta** ao texto existente.
+padrão, igual a antes), **Falar** e **Imagem** (no aparelho há também
+**Foto**, da câmera). Falar/Imagem só **anexam**: o áudio (máx. 1, 2 min) e as
+imagens (máx. 3) entram numa **lista de anexos** onde dá pra **ouvir** o áudio,
+**ver** a imagem em tela cheia e **excluir** - e **nada sai do aparelho**. Só ao
+tocar em **Continuar** os anexos são enviados e lidos; o texto extraído é
+**acrescentado** ao campo e aparece o card "confira antes de continuar"
+(miniaturas e **valores em destaque**, inclusive por extenso - "dois mil e
+oitocentos reais"). O **Continuar fica travado até tocar em "Conferi o
+texto"** (RF-027: preço mal ouvido/lido não pode passar batido), e um segundo
+**Continuar** é que interpreta. Se um anexo falhar, ele continua na lista pra
+tentar de novo ou excluir.
 
 | Peça | O que faz |
 | --- | --- |

@@ -6,16 +6,20 @@ import { Button, Card, Chip, Text, TextInput, useTheme as usePaperTheme } from '
 import { findValueMentions } from '@orcaai/shared';
 
 import { CustomerPickerModal } from '@/components/customer-picker-modal';
-import {
-  ExtractionThumbnails,
-  InputExtractionBar,
-  type ExtractedInput,
-} from '@/components/input-extraction-bar';
+import { AttachmentBar } from '@/components/attachment-bar';
+import { AttachmentList } from '@/components/attachment-list';
+import { Image } from 'expo-image';
 import { BottomTabInset, MaxContentWidth, Spacing, WebTopBarInset } from '@/constants/theme';
 import { useQuoteDraft } from '@/hooks/use-quote-draft';
 import type { Customer } from '@/lib/customers';
+import { ExtractionUserError, readAttachments, type Attachment, type ExtractionKind } from '@/lib/input-extraction';
 import { createQuoteWithText, interpretQuote } from '@/lib/quotes';
 import { reportError } from '@/lib/monitoring';
+
+function reviewTitle(kinds: ExtractionKind[]) {
+  if (kinds.includes('audio') && kinds.includes('image')) return 'Texto ouvido do áudio e lido das imagens';
+  return kinds.includes('audio') ? 'Texto ouvido do áudio' : 'Texto lido da imagem';
+}
 
 function draftStatusLabel(status: ReturnType<typeof useQuoteDraft>['status']) {
   switch (status) {
@@ -36,24 +40,68 @@ export default function NewQuoteScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [pickerVisible, setPickerVisible] = useState(false);
-  // Fase 4A: texto que veio de áudio/imagem precisa ser conferido (RF-027) -
-  // enquanto houver uma leitura não confirmada, "Continuar" fica travado.
-  const [review, setReview] = useState<ExtractedInput | null>(null);
+  // Fase 4A: áudio/imagem viram ANEXOS (só no aparelho, nada enviado); a
+  // leitura acontece no "Continuar" e o texto que sair precisa ser conferido
+  // (RF-027) - enquanto houver uma leitura não confirmada, "Continuar" fica
+  // travado.
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isReading, setIsReading] = useState(false);
+  const [review, setReview] = useState<{
+    kinds: ExtractionKind[];
+    thumbnails: string[];
+    truncated: boolean;
+  } | null>(null);
 
   const canContinue = useMemo(
-    () => sourceText.trim().length > 0 && review === null,
-    [sourceText, review],
+    () => (sourceText.trim().length > 0 || attachments.length > 0) && review === null,
+    [sourceText, attachments, review],
   );
   const valueMentions = useMemo(() => (review ? findValueMentions(sourceText) : []), [review, sourceText]);
-  const statusLabel = isSubmitting ? 'Interpretando…' : draftStatusLabel(status);
+  const busy = isSubmitting || isReading;
+  const statusLabel = isReading
+    ? 'Lendo os anexos…'
+    : isSubmitting
+      ? 'Interpretando…'
+      : draftStatusLabel(status);
 
-  function handleExtracted(input: ExtractedInput) {
-    // Junta ao que já foi digitado/lido (parágrafo novo), em vez de apagar.
-    setSourceText(sourceText.trim().length > 0 ? `${sourceText.trimEnd()}\n\n${input.result.text}` : input.result.text);
-    setReview(input);
+  async function handleReadAttachments() {
+    setIsReading(true);
+    try {
+      const { pieces, failures } = await readAttachments(attachments);
+
+      if (pieces.length > 0) {
+        const extracted = pieces.map((piece) => piece.text).join('\n\n');
+        setSourceText(sourceText.trim().length > 0 ? `${sourceText.trimEnd()}\n\n${extracted}` : extracted);
+        const readIds = new Set(pieces.flatMap((piece) => piece.ids));
+        setAttachments((current) => current.filter((attachment) => !readIds.has(attachment.id)));
+        setReview({
+          kinds: pieces.map((piece) => piece.kind),
+          thumbnails: pieces.flatMap((piece) => piece.thumbnails),
+          truncated: pieces.some((piece) => piece.truncated),
+        });
+      }
+
+      for (const failure of failures) {
+        if (failure.error instanceof ExtractionUserError) {
+          Alert.alert('Não deu para ler', failure.error.message);
+        } else {
+          reportError(failure.error, failure.kind === 'audio' ? 'audio-extract' : 'image-extract');
+          Alert.alert(
+            'Não foi possível ler agora',
+            'Verifique sua conexão e tente de novo - ou exclua o anexo e digite o texto do orçamento.',
+          );
+        }
+      }
+    } finally {
+      setIsReading(false);
+    }
   }
 
   async function handleContinue() {
+    if (attachments.length > 0) {
+      await handleReadAttachments();
+      return;
+    }
     setIsSubmitting(true);
     try {
       const quote = await createQuoteWithText(sourceText.trim(), selectedCustomer?.id ?? null);
@@ -101,23 +149,34 @@ export default function NewQuoteScreen() {
             </Card.Content>
           </Card>
 
-          <InputExtractionBar disabled={isSubmitting} onExtracted={handleExtracted} />
+          <AttachmentBar
+            attachments={attachments}
+            disabled={busy}
+            onAdd={(added) => setAttachments((current) => [...current, ...added])}
+          />
+          <AttachmentList
+            attachments={attachments}
+            disabled={busy}
+            onRemove={(id) => setAttachments((current) => current.filter((attachment) => attachment.id !== id))}
+          />
 
           {review && (
             <Card mode="outlined">
               <Card.Content style={styles.reviewContent}>
-                <Text variant="titleSmall">
-                  {review.kind === 'audio' ? 'Texto ouvido do áudio' : 'Texto lido da imagem'} - confira
-                  antes de continuar
-                </Text>
+                <Text variant="titleSmall">{reviewTitle(review.kinds)} - confira antes de continuar</Text>
                 <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
-                  {review.kind === 'audio'
-                    ? 'Palavras podem ser ouvidas errado. '
-                    : 'Letras e números podem ser lidos errado. '}
+                  {review.kinds.includes('audio') ? 'Palavras podem ser ouvidas errado. ' : ''}
+                  {review.kinds.includes('image') ? 'Letras e números podem ser lidos errado. ' : ''}
                   Confira principalmente valores, quantidades e prazos, e corrija no campo abaixo.
-                  {review.result.truncated ? ' O texto era grande e foi cortado.' : ''}
+                  {review.truncated ? ' O texto era grande e foi cortado.' : ''}
                 </Text>
-                {review.thumbnails.length > 0 && <ExtractionThumbnails uris={review.thumbnails} />}
+                {review.thumbnails.length > 0 && (
+                  <View style={styles.chips}>
+                    {review.thumbnails.map((uri) => (
+                      <Image key={uri} source={{ uri }} style={styles.thumbnail} contentFit="cover" />
+                    ))}
+                  </View>
+                )}
                 {valueMentions.length > 0 && (
                   <View style={styles.chips}>
                     {valueMentions.map((value) => (
@@ -150,7 +209,7 @@ export default function NewQuoteScreen() {
               </Text>
             )}
 
-            <Button mode="contained" onPress={handleContinue} loading={isSubmitting} disabled={!canContinue || isSubmitting}>
+            <Button mode="contained" onPress={handleContinue} loading={busy} disabled={!canContinue || busy}>
               Continuar
             </Button>
           </View>
@@ -208,6 +267,11 @@ const styles = StyleSheet.create({
   },
   reviewContent: {
     gap: Spacing.two,
+  },
+  thumbnail: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
   },
   chips: {
     flexDirection: 'row',

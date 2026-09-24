@@ -6,8 +6,10 @@ import { appendFilePart } from './form-file';
 import { supabase } from './supabase';
 
 // Fase 4A: áudio e imagem só produzem TEXTO (a function `extract-input`
-// transcreve/lê e devolve; nada é guardado). O usuário revisa o texto antes
-// de "Continuar" - ver components/input-extraction-bar.tsx.
+// transcreve/lê e devolve; nada é guardado). Gravar/escolher só ANEXA (fica no
+// aparelho, numa lista que o usuário pode ouvir/ver/excluir); nada é enviado
+// até tocar em "Continuar" - aí readAttachments() extrai o texto, que o
+// usuário revisa antes de interpretar.
 
 // Foto de celular passa fácil de 5 MB e o custo de visão cresce com o
 // tamanho: reduz pro lado maior de ~1600 px em JPEG antes de enviar (o teto do
@@ -95,4 +97,72 @@ export async function extractTextFromImages(uris: string[]): Promise<ExtractionR
     await appendFilePart(form, 'file', { uri, name: `imagem-${index + 1}.jpg`, type: 'image/jpeg' });
   }
   return callExtractInput(form, 'image');
+}
+
+// Anexo ainda no aparelho, esperando o "Continuar".
+export type Attachment =
+  | { id: string; kind: 'audio'; uri: string; durationMs: number }
+  | { id: string; kind: 'image'; uri: string; width: number; height: number };
+
+export function newAttachmentId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// No máximo 1 áudio (regravar = excluir e gravar de novo) e MAX_IMAGES imagens.
+export function canAddAttachment(attachments: Attachment[], kind: ExtractionKind): boolean {
+  return kind === 'audio'
+    ? !attachments.some((attachment) => attachment.kind === 'audio')
+    : attachments.filter((attachment) => attachment.kind === 'image').length < MAX_IMAGES;
+}
+
+export type AttachmentReadResult = {
+  // Um texto por tipo lido com sucesso (áudio primeiro, depois as imagens).
+  pieces: { kind: ExtractionKind; text: string; truncated: boolean; ids: string[]; thumbnails: string[] }[];
+  // O que falhou continua na lista pro usuário tentar de novo ou excluir.
+  failures: { kind: ExtractionKind; error: unknown }[];
+};
+
+// Só aqui a mídia sai do aparelho (uma chamada por tipo).
+export async function readAttachments(attachments: Attachment[]): Promise<AttachmentReadResult> {
+  const result: AttachmentReadResult = { pieces: [], failures: [] };
+
+  const audio = attachments.find((attachment) => attachment.kind === 'audio');
+  if (audio && audio.kind === 'audio') {
+    try {
+      const extracted = await extractTextFromAudio({ uri: audio.uri, durationMs: audio.durationMs });
+      result.pieces.push({
+        kind: 'audio',
+        text: extracted.text,
+        truncated: extracted.truncated,
+        ids: [audio.id],
+        thumbnails: [],
+      });
+    } catch (error) {
+      result.failures.push({ kind: 'audio', error });
+    }
+  }
+
+  const images = attachments.filter((attachment) => attachment.kind === 'image');
+  if (images.length > 0) {
+    try {
+      const uris: string[] = [];
+      for (const image of images) {
+        if (image.kind === 'image') {
+          uris.push(await reduceImage({ uri: image.uri, width: image.width, height: image.height }));
+        }
+      }
+      const extracted = await extractTextFromImages(uris);
+      result.pieces.push({
+        kind: 'image',
+        text: extracted.text,
+        truncated: extracted.truncated,
+        ids: images.map((image) => image.id),
+        thumbnails: images.map((image) => image.uri),
+      });
+    } catch (error) {
+      result.failures.push({ kind: 'image', error });
+    }
+  }
+
+  return result;
 }
