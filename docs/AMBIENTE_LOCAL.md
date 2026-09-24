@@ -669,10 +669,15 @@ correção é recriar a stack (`pnpm exec supabase stop` + `pnpm exec supabase
 start` - os dados do volume ficam); vale sempre depois de um `link`, e deixa
 o ambiente local igual ao de produção.
 
-**Pra ir ao projeto hospedado** (ainda não feito): `db push` (migração),
-`functions deploy` (as 4 alteradas/novas), e agendar `purge-deleted-accounts`
-1x/dia com o mesmo padrão do `check-ai-cost` (pg_cron + pg_net, chave secret
-no Vault `check_ai_cost_key`).
+**No projeto hospedado (feito em 2026-09-24):** migração aplicada com `db
+push`, as functions publicadas (`delete-account`, `purge-deleted-accounts` e
+as alteradas `interpret-quote`/`issue-quote`) e a rotina agendada **1x/dia às
+03:00 UTC** (`purge-deleted-accounts-daily`, pg_cron + pg_net, chave secret no
+Vault `check_ai_cost_key` - o mesmo padrão do `check-ai-cost`). Conferido de
+fora sem criar pedido nenhum: a rotina chamada pelo caminho do cron responde
+`{"deleted":0,"failed":0}`; sem credencial dá 401; `delete-account` sem login
+dá 401; a tabela de pedidos lida com a chave pública volta vazia. **Não teste
+a exclusão com a sua conta real** - use uma conta Google de teste.
 
 ### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
 
