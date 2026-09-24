@@ -5,13 +5,17 @@ import {
   ActivityIndicator,
   Avatar,
   Button,
+  Dialog,
   Divider,
+  Portal,
   Text,
   TextInput,
   useTheme as usePaperTheme,
 } from 'react-native-paper';
 
+import { notifyOrganizationChanged } from '@/hooks/use-auth-gate';
 import { BottomTabInset, Spacing, WebTopBarInset } from '@/constants/theme';
+import { requestAccountDeletion } from '@/lib/account-deletion';
 import { signOut } from '@/lib/auth';
 import {
   getCurrentOrganizationId,
@@ -108,6 +112,10 @@ export default function ProfileScreen() {
   const [logoPath, setLogoPath] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [logoError, setLogoError] = useState<string | null>(null);
@@ -151,6 +159,23 @@ export default function ProfileScreen() {
       setPreviewHtml(buildProfilePreviewHtml(toProfile(form), logoDataUri));
     } finally {
       setLoadingPreview(false);
+    }
+  }
+
+  // Task 7 (RF-007): pede a exclusão da conta (agenda 7 dias, dá pra
+  // cancelar). Confirmação por digitação do nome comercial pra evitar toque
+  // acidental. O gate reage sozinho e leva pra tela "conta agendada".
+  async function handleConfirmDeletion() {
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await requestAccountDeletion();
+      setDeleteDialogVisible(false);
+      notifyOrganizationChanged();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -345,7 +370,59 @@ export default function ProfileScreen() {
         ) : null}
 
         <Button onPress={() => signOut()}>Sair</Button>
+
+        {form && organizationId && (
+          <Button
+            mode="text"
+            textColor={paperTheme.colors.error}
+            onPress={() => {
+              setDeleteConfirmText('');
+              setDeleteError(null);
+              setDeleteDialogVisible(true);
+            }}>
+            Excluir minha conta
+          </Button>
+        )}
       </SafeAreaView>
+
+      <Portal>
+        <Dialog visible={deleteDialogVisible} onDismiss={() => !deleting && setDeleteDialogVisible(false)}>
+          <Dialog.Title>Excluir conta</Dialog.Title>
+          <Dialog.Content style={{ gap: Spacing.two }}>
+            <Text variant="bodyMedium">
+              Isso apaga sua empresa, clientes, orçamentos (inclusive os já emitidos), PDFs e logo. Depois de 7 dias
+              não dá mais para recuperar.
+            </Text>
+            <Text variant="bodyMedium">
+              Durante esses 7 dias você pode entrar de novo e cancelar a exclusão. Nesse período o app fica bloqueado.
+            </Text>
+            <TextInput
+              mode="outlined"
+              label={`Digite "${form?.tradeName.trim() ?? ''}" para confirmar`}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              autoCapitalize="none"
+            />
+            {deleteError && <Text style={{ color: paperTheme.colors.error }}>{deleteError}</Text>}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDeleteDialogVisible(false)} disabled={deleting}>
+              Voltar
+            </Button>
+            <Button
+              textColor={paperTheme.colors.error}
+              onPress={handleConfirmDeletion}
+              loading={deleting}
+              disabled={
+                deleting ||
+                !form?.tradeName.trim() ||
+                deleteConfirmText.trim().toLowerCase() !== form.tradeName.trim().toLowerCase()
+              }>
+              Excluir conta
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
       <ProfilePreviewModal html={previewHtml} onClose={() => setPreviewHtml(null)} />
     </ScrollView>
   );

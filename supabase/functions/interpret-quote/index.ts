@@ -1,6 +1,7 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { z } from "zod";
+import { rejectIfPendingDeletion } from "../_shared/account.ts";
 import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   AI_INTERPRETATION_JSON_SCHEMA,
@@ -60,6 +61,10 @@ export default {
     if (req.method !== "POST") {
       return Response.json({ message: "method not allowed" }, { status: 405 });
     }
+
+    // Conta com exclusão agendada não gasta IA nem emite (Task 7).
+    const pendingDeletion = await rejectIfPendingDeletion(ctx.supabase);
+    if (pendingDeletion) return pendingDeletion;
 
     const parsedBody = requestSchema.safeParse(await req.json().catch(() => null));
     if (!parsedBody.success) {

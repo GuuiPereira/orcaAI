@@ -41,8 +41,16 @@ function RootLayout() {
       }
     } else if (status === 'no-organization') {
       if (current !== 'onboarding') router.replace('/onboarding');
+    } else if (status === 'pending-deletion') {
+      // Conta agendada pra exclusão (Task 7): só a tela de cancelar/sair.
+      if (current !== 'pending-deletion') router.replace('/pending-deletion');
     } else if (status === 'ready') {
-      if (current === 'login' || current === 'onboarding' || current === 'auth-callback') {
+      if (
+        current === 'login' ||
+        current === 'onboarding' ||
+        current === 'auth-callback' ||
+        current === 'pending-deletion'
+      ) {
         router.replace('/');
       }
     }

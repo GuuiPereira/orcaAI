@@ -624,6 +624,56 @@ pra o update entrar. Mudança **nativa** (biblioteca nova, permissão,
 plugin no `app.json`) continua pedindo APK novo - e se mudar o `version`
 do `app.json`, os APKs antigos deixam de receber updates.
 
+### Exclusão de conta (Task 7 da Fase 2)
+
+Fluxo com **prazo de 7 dias** (decisão do usuário em 2026-09-24, cobre a
+"recuperação de conta" que o gate de lançamento exige): o usuário pede a
+exclusão no Perfil ("Excluir minha conta", confirma digitando o nome
+comercial), a conta fica **agendada** por 7 dias - o app mostra só a tela
+"Sua conta será excluída" (com "Cancelar exclusão" e "Sair") e as functions
+`interpret-quote`/`issue-quote` recusam com 403 - e a rotina
+`purge-deleted-accounts` apaga tudo quando o prazo vence.
+
+| Peça | O que faz |
+| --- | --- |
+| `account_deletion_requests` (migração `20260924174324`) | Estado do pedido (`user_id`, `requested_at`, `scheduled_for`). O usuário só **lê** o próprio (RLS); quem escreve é sempre uma function (service role). |
+| `delete-account` (`auth: 'user'`) | `{action: 'request'\|'cancel'}` sobre a **própria** conta (o id vem do JWT). Pedir de novo mantém o prazo original (idempotente). |
+| `purge-deleted-accounts` (`auth: 'secret'`, `verify_jwt = false`) | Para cada pedido vencido: apaga os arquivos do Storage das organizações do usuário (`logos`, `quote-pdfs` - **sem FK, ficariam órfãos**), depois a organização (a cascata leva clientes, orçamentos, itens, versões, eventos, interpretações e contador de numeração), depois o usuário do Auth. Uma conta que falha não impede as outras. |
+
+**Por que a ordem é essa:** apagar o usuário do Auth era bloqueado por
+`organizations.owner_user_id` (`on delete restrict`) e por
+`quote_versions.created_by`/`quote_events.actor_user_id` (sem ação). A
+migração troca esses dois últimos por `on delete set null` (o registro fica e
+só perde a autoria - também anonimiza); a organização é apagada antes do
+usuário. Testado que apagar a organização leva clientes e orçamentos sem
+esbarrar no `restrict` de `quotes.customer_id`.
+
+**O que NÃO some com a exclusão** (informar na política de privacidade):
+eventos do Sentry que já carregam o id do usuário expiram pela retenção do
+próprio Sentry; backups do Supabase podem reter dados apagados até rotacionar.
+
+**Testar** (`python3 tools/account-deletion-test.py`, precisa da stack local e de `pnpm exec supabase functions serve` rodando): cria as
+contas A e B com organização, cliente, orçamento e arquivos nos dois buckets;
+A pede exclusão (7 dias, idempotente, RLS: B não vê nem apaga o pedido de A,
+usuário comum não insere pedido direto), A fica bloqueada de IA/emissão e B
+segue normal, A cancela e volta a operar, `purge` recusa sem chave/com JWT de
+usuário, não apaga antes do prazo, e depois do prazo apaga A **por completo**
+(Auth, organização, cascata, perfil, arquivos) deixando B **intacta**. 29
+verificações, todas passando.
+
+**Armadilha achada no teste - `supabase link` fixa as versões dos serviços
+locais nas do projeto hospedado.** Depois do `link`, o Storage local passou
+a ser o `v1.77.5` (o hospedado), mas o container em execução continuava o
+`v1.66.4` de antes: qualquer upload dava `500 DatabaseError 42P10`. A
+correção é recriar a stack (`pnpm exec supabase stop` + `pnpm exec supabase
+start` - os dados do volume ficam); vale sempre depois de um `link`, e deixa
+o ambiente local igual ao de produção.
+
+**Pra ir ao projeto hospedado** (ainda não feito): `db push` (migração),
+`functions deploy` (as 4 alteradas/novas), e agendar `purge-deleted-accounts`
+1x/dia com o mesmo padrão do `check-ai-cost` (pg_cron + pg_net, chave secret
+no Vault `check_ai_cost_key`).
+
 ### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
 
 Botão "Ver prévia do orçamento" no último passo do onboarding e no Perfil
