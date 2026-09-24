@@ -36,3 +36,7 @@ pnpm-debug.log*
 
 # Local task notes (not versioned)
 .tasks/
+
+# Builds locais do EAS (apk/aab) - grandes e regeneráveis
+*.apk
+*.aab
