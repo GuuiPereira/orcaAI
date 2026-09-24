@@ -94,7 +94,7 @@ export type ResponsesApiUsage = {
 // Retorna null (nunca um número chutado) quando o modelo não está na
 // tabela ou não há dados de uso - custo desconhecido é melhor do que
 // custo inventado.
-export function estimateCostCents(
+export function estimateCostCentsExact(
   modelId: string,
   usage: ResponsesApiUsage | null | undefined,
 ): number | null {
@@ -119,5 +119,37 @@ export function estimateCostCents(
       outputTokens * pricing.outputCentsPer1M) /
     1_000_000;
 
-  return Math.round(costCents);
+  return costCents;
+}
+
+// `ai_interpretations.estimated_cost_cents` é inteiro, então segue
+// arredondando. Chamadas baratas (ex.: extrair texto de uma imagem, ~0,02
+// centavo) arredondariam pra 0 e sumiriam das métricas - essas usam a versão
+// exata acima (`input_extractions.estimated_cost_cents` é numeric).
+export function estimateCostCents(
+  modelId: string,
+  usage: ResponsesApiUsage | null | undefined,
+): number | null {
+  const exact = estimateCostCentsExact(modelId, usage);
+  return exact === null ? null : Math.round(exact);
+}
+
+// Transcrição de áudio é cobrada por minuto (a resposta traz `usage.seconds`).
+// Fonte: página de preços da OpenAI, consultada em 2026-09-24 (por resumo da
+// página - conferir no site oficial antes de confiar em fechamento de conta).
+// Em centavos de dólar por minuto.
+export type TranscriptionPricing = { id: string; centsPerMinute: number };
+
+export const OPENAI_TRANSCRIPTION_PRICING: readonly TranscriptionPricing[] = [
+  { id: "gpt-transcribe", centsPerMinute: 0.45 },
+  { id: "gpt-4o-transcribe", centsPerMinute: 0.6 },
+  { id: "gpt-4o-mini-transcribe", centsPerMinute: 0.3 },
+  { id: "whisper-1", centsPerMinute: 0.6 },
+];
+
+// null (nunca um número chutado) quando o modelo não está na tabela.
+export function estimateTranscriptionCostCents(modelId: string, seconds: number): number | null {
+  const pricing = OPENAI_TRANSCRIPTION_PRICING.find((entry) => entry.id === modelId);
+  if (!pricing || !Number.isFinite(seconds) || seconds < 0) return null;
+  return (seconds / 60) * pricing.centsPerMinute;
 }

@@ -153,6 +153,9 @@ export default {
         },
         body: JSON.stringify({
           model: openAiModel,
+          // O padrão da API é guardar a resposta no lado da OpenAI; o texto do
+          // orçamento tem dados de cliente, então não guardar.
+          store: false,
           input: [
             { role: "system", content: prompt.system },
             { role: "user", content: prompt.user },
