@@ -12,3 +12,4 @@ export * from "./domain/quote.ts";
 export * from "./domain/quote-item.ts";
 export * from "./pdf/quote-html.ts";
 export * from "./monitoring/sanitize.ts";
+export * from "./pdf/file-name.ts";

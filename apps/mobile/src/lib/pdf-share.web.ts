@@ -7,12 +7,12 @@
 // o prestador abre o arquivo baixado e usa "Imprimir > Salvar como PDF" do
 // próprio navegador. É uma alternativa só para o alvo web; no app nativo
 // (Android/iOS) o compartilhamento usa o menu nativo de verdade.
-export async function shareQuotePdf(html: string): Promise<void> {
+export async function shareQuotePdf(html: string, fileName: string): Promise<void> {
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'orcamento.html';
+  anchor.download = `${fileName}.html`;
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);

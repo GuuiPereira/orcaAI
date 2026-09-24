@@ -1,6 +1,7 @@
 import type { AiConfidence, AiInterpretationResult, Discount, PdfItem, QuoteItemType, QuoteStatus } from '@orcaai/shared';
 import {
   buildQuoteHtml,
+  buildQuotePdfFileName,
   calculateQuoteTotals,
   centsToReaisInput,
   formatCentsAsBRL,
@@ -174,6 +175,7 @@ export default function QuoteEditorScreen() {
   const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
   const [pdfMode, setPdfMode] = useState<PdfGenerationMode>('completo');
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewFileName, setPreviewFileName] = useState('orcamento');
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [quoteMeta, setQuoteMeta] = useState<{
@@ -564,6 +566,12 @@ export default function QuoteEditorScreen() {
     });
   }
 
+  // Nome do arquivo compartilhado: orcamento_DDMMAAAA_Cliente[_servico|_material]
+  // (ver buildQuotePdfFileName em @orcaai/shared).
+  function pdfFileName(mode: 'completo' | 'service' | 'material'): string {
+    return buildQuotePdfFileName({ date: new Date(), customerName: linkedCustomer?.name, mode });
+  }
+
   async function handleGeneratePress() {
     if (!organization) {
       Alert.alert('Aguarde', 'Ainda carregando os dados do prestador.');
@@ -574,12 +582,15 @@ export default function QuoteEditorScreen() {
       if (pdfMode === 'separado') {
         const serviceHtml = buildHtmlFor('service');
         const materialHtml = buildHtmlFor('material');
-        if (serviceHtml) await shareQuotePdf(serviceHtml);
-        if (materialHtml) await shareQuotePdf(materialHtml);
+        if (serviceHtml) await shareQuotePdf(serviceHtml, pdfFileName('service'));
+        if (materialHtml) await shareQuotePdf(materialHtml, pdfFileName('material'));
         return;
       }
       const html = buildHtmlFor(pdfMode);
-      if (html) setPreviewHtml(html);
+      if (html) {
+        setPreviewFileName(pdfFileName(pdfMode));
+        setPreviewHtml(html);
+      }
     } catch (error) {
       reportError(error, 'pdf-generate');
       Alert.alert(
@@ -681,7 +692,7 @@ export default function QuoteEditorScreen() {
     if (!previewHtml) return;
     setGeneratingPdf(true);
     try {
-      await shareQuotePdf(previewHtml);
+      await shareQuotePdf(previewHtml, previewFileName);
     } catch (error) {
       reportError(error, 'pdf-share');
       Alert.alert(
