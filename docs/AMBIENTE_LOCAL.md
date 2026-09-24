@@ -737,6 +737,18 @@ versão, então APKs 1.0.0 antigos **não** recebem o JavaScript novo por
 `eas update` (que quebraria por falta do módulo nativo). Só publique `eas
 update` para o 1.1.0 depois de instalar o APK 1.1.0.
 
+**Armadilha - `microphonePermission: false` no plugin do `expo-image-picker`
+remove `RECORD_AUDIO` do APK**, mesmo com o `expo-audio` pedindo (o 1º APK 1.1.0
+saiu assim e o "Falar" não teria funcionado). Deixe o plugin da câmera com o
+mesmo texto de microfone. **Confira sempre o APK antes de distribuir:**
+`unzip -o build-*.apk AndroidManifest.xml && strings -e l AndroidManifest.xml | grep -E "RECORD_AUDIO|CAMERA|^1\."`.
+
+**Deploy da 4A no hospedado (feito em 2026-09-24):** `db push` (migração
+`input_extractions`) e `functions deploy extract-input interpret-quote`, sem
+secret novo (usa `OPENAI_API_KEY`/`OPENAI_MODEL` que já existem; limite padrão
+60/dia; transcrição `gpt-transcribe`). Chame `apps/mobile/node_modules/.bin/eas`
+e `node_modules/.bin/supabase` direto se o `pnpm exec` recusar (armadilha abaixo).
+
 **Armadilha - `pnpm typecheck`/`pnpm exec` recusando rodar** ("Command failed
 ... pnpm install") depois de um `expo install`: o pnpm quer reinstalar por
 causa do store-dir diferente. Rode uma vez `CI=true pnpm --store-dir
