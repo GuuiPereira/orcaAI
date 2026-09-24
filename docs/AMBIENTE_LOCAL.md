@@ -547,6 +547,83 @@ Esses bugs **não dá pra reproduzir no navegador**; corrigir exige um build
 novo. Quando o JS mudar sem mudança nativa, dá pra evitar novo build
 configurando o EAS Update (ainda não configurado).
 
+### Build local do APK e atualizações sem build (Task 9)
+
+A fila do EAS gratuito pode passar de 1h. O `eas build --local` compila na
+própria máquina, com o mesmo perfil, as mesmas variáveis e a **mesma chave de
+assinatura** do EAS (então o APK local atualiza um instalado pela nuvem).
+
+**Instalação única, sem `sudo`** (tudo na pasta pessoal; pra desfazer é só
+apagar `~/.local/jdk-17`, `~/Android` e `~/.gradle`):
+
+1. **JDK 17 (Temurin):** baixar
+   `https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse`
+   e extrair em `~/.local/jdk-17` (`tar -xzf ... --strip-components=1`).
+2. **Ferramentas de linha de comando do Android:** baixar
+   `https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip`,
+   extrair em `~/Android/Sdk/cmdline-tools` e renomear a pasta
+   `cmdline-tools` de dentro para `latest` (o caminho tem que ser
+   `~/Android/Sdk/cmdline-tools/latest`).
+3. **Variáveis, só do terminal atual** (repetir a cada terminal novo):
+   `JAVA_HOME=$HOME/.local/jdk-17`, `ANDROID_HOME=$HOME/Android/Sdk` e o
+   `PATH` com `$JAVA_HOME/bin`, `$ANDROID_HOME/cmdline-tools/latest/bin` e
+   `$ANDROID_HOME/platform-tools`.
+4. **Licenças (aceite dos termos do Google) e componentes que o RN 0.86
+   pede:** `yes | sdkmanager --licenses` e depois
+   `sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006"`.
+5. **Memória do Gradle** - sem isto o 1º build falha com "Metaspace".
+   Em `~/.gradle/gradle.properties`:
+
+```properties
+org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g
+kotlin.daemon.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=2g
+```
+
+**Gerar o APK** (no terminal com as variáveis do passo 3):
+
+```bash
+cd apps/mobile && pnpm exec eas build --platform android --profile preview --local
+```
+
+O 1º build leva ~20-30 min (baixa e compila tudo); os seguintes são bem
+mais rápidos (cache do Gradle). O arquivo sai em `apps/mobile/build-*.apk`
+(`*.apk` está no `.gitignore`). Sem link/QR do EAS: o APK vai por
+cabo/Drive/WhatsApp e o Android pede pra liberar "instalar apps
+desconhecidos".
+
+**Pegadinhas:**
+
+- **`OutOfMemoryError: Metaspace`** em `kspReleaseKotlin` /
+  `lintVitalAnalyzeRelease`: o limite padrão do Gradle é baixo pra tantos
+  módulos nativos - é o passo 5, depois encerrar o daemon antigo
+  (`pkill -f GradleDaemon`) e rodar de novo.
+- **Commite antes de buildar** (`eas build --local` empacota pelo git): a
+  configuração do EAS Update estava sem commit quando o 1º build local
+  começou; deu certo (o pacote leva os arquivos do disco), mas não dependa
+  disso.
+- Ruído no fim de um build interrompido (`package.json does not exist ...
+  ON_BUILD_COMPLETE_HOOK`) é só consequência do `Ctrl+C`, não é um erro a
+  mais.
+- Dá pra **inspecionar o APK** sem instalar: extrair o
+  `AndroidManifest.xml` e rodar `strings -e l` nele mostra a URL do update,
+  a versão de runtime e o canal; `assets/index.android.bundle` é o JS.
+
+**EAS Update (correções de JS sem novo build):** `expo-updates` está no
+app; `runtimeVersion` pela política `appVersion` (hoje `1.0.0` - só recebe
+update quem tem o mesmo `version` do `app.json`) e canais `preview`/
+`development` no `eas.json`. Publicar:
+
+```bash
+cd apps/mobile && pnpm exec eas update --channel preview --environment preview --message "descrição"
+```
+
+`--environment preview` é obrigatório: é ele que embute no pacote as
+variáveis `EXPO_PUBLIC_*` (Supabase, Sentry); sem ele o update sairia sem
+elas. No celular, feche o app por completo e abra de novo (às vezes 2x)
+pra o update entrar. Mudança **nativa** (biblioteca nova, permissão,
+plugin no `app.json`) continua pedindo APK novo - e se mudar o `version`
+do `app.json`, os APKs antigos deixam de receber updates.
+
 ### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
 
 Botão "Ver prévia do orçamento" no último passo do onboarding e no Perfil
