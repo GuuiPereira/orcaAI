@@ -2,6 +2,7 @@ import { MAX_AUDIO_SECONDS, MAX_IMAGES } from '@orcaai/shared';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 
+import { appendFilePart } from './form-file';
 import { supabase } from './supabase';
 
 // Fase 4A: áudio e imagem só produzem TEXTO (a function `extract-input`
@@ -21,20 +22,7 @@ export type ExtractionResult = { text: string; units: number; truncated: boolean
 // Erros esperados (o usuário resolve sozinho) - não vão pro Sentry.
 export class ExtractionUserError extends Error {}
 
-type FilePart = { uri: string; name: string; type: string };
-
 export type PickedImage = { uri: string; width: number; height: number };
-
-// No nativo o FormData do React Native aceita `{uri, name, type}` e lê o
-// arquivo sozinho; na web isso não existe, então baixa o blob local.
-async function appendFile(form: FormData, part: FilePart) {
-  if (Platform.OS === 'web') {
-    const blob = await (await fetch(part.uri)).blob();
-    form.append('file', new File([blob], part.name, { type: part.type }));
-  } else {
-    form.append('file', part as unknown as Blob);
-  }
-}
 
 async function errorFromResponse(error: unknown, kind: ExtractionKind): Promise<Error> {
   const context = error && typeof error === 'object' ? (error as { context?: Response }).context : undefined;
@@ -81,7 +69,7 @@ export async function extractTextFromAudio(recording: {
   const form = new FormData();
   form.append('kind', 'audio');
   form.append('duration_ms', String(Math.round(recording.durationMs)));
-  await appendFile(form, {
+  await appendFilePart(form, 'file', {
     uri: recording.uri,
     name: isWeb ? 'audio.webm' : 'audio.m4a',
     type: isWeb ? 'audio/webm' : 'audio/mp4',
@@ -104,7 +92,7 @@ export async function extractTextFromImages(uris: string[]): Promise<ExtractionR
   const form = new FormData();
   form.append('kind', 'image');
   for (const [index, uri] of uris.slice(0, MAX_IMAGES).entries()) {
-    await appendFile(form, { uri, name: `imagem-${index + 1}.jpg`, type: 'image/jpeg' });
+    await appendFilePart(form, 'file', { uri, name: `imagem-${index + 1}.jpg`, type: 'image/jpeg' });
   }
   return callExtractInput(form, 'image');
 }

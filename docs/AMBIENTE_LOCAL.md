@@ -737,6 +737,17 @@ versão, então APKs 1.0.0 antigos **não** recebem o JavaScript novo por
 `eas update` (que quebraria por falta do módulo nativo). Só publique `eas
 update` para o 1.1.0 depois de instalar o APK 1.1.0.
 
+**Armadilha - upload multipart no aparelho: `{uri, name, type}` NÃO funciona no
+SDK 57.** O Expo troca o `fetch` global pelo `expo/fetch`, que recusa esse
+formato clássico do React Native ("Unsupported FormDataPart implementation")
+- no aparelho tudo falhava com "Não foi possível ler agora" enquanto no
+navegador (que usa `File` de verdade) funcionava, e nada chegava ao servidor
+(nenhuma linha em `input_extractions`). O formato aceito é um objeto com
+`bytes()`: `lib/form-file.ts` lê o arquivo com `new File(uri).bytes()` do
+`expo-file-system` e anexa `{name, type, bytes}` (a versão web é
+`form-file.web.ts`). Serve pra qualquer upload multipart futuro do app. **Teste
+no navegador não pega isso** - por isso o roteiro do aparelho é obrigatório.
+
 **Armadilha - `microphonePermission: false` no plugin do `expo-image-picker`
 remove `RECORD_AUDIO` do APK**, mesmo com o `expo-audio` pedindo (o 1º APK 1.1.0
 saiu assim e o "Falar" não teria funcionado). Deixe o plugin da câmera com o
