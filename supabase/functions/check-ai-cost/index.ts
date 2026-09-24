@@ -17,15 +17,19 @@ export default {
     }
 
     const day = new Date().toISOString().slice(0, 10);
-    const { data, error } = await ctx.supabaseAdmin
-      .from("metrics_ai_daily")
-      .select("cost_cents, failed, interpretations")
-      .eq("day", day);
-    if (error) {
+    // Interpretação (texto -> orçamento) + leitura de áudio/imagem (Fase 4A):
+    // as duas gastam OpenAI, então o limite vale pra soma.
+    const [interpretations, extractions] = await Promise.all([
+      ctx.supabaseAdmin.from("metrics_ai_daily").select("cost_cents").eq("day", day),
+      ctx.supabaseAdmin.from("metrics_extractions_daily").select("cost_cents").eq("day", day),
+    ]);
+    if (interpretations.error || extractions.error) {
       return Response.json({ message: "failed to read metrics" }, { status: 500 });
     }
 
-    const costCents = (data ?? []).reduce((sum, row) => sum + Number(row.cost_cents), 0);
+    const sumCost = (rows: { cost_cents: number | string }[] | null) =>
+      (rows ?? []).reduce((sum, row) => sum + Number(row.cost_cents), 0);
+    const costCents = sumCost(interpretations.data) + sumCost(extractions.data);
     const over = costCents > limit;
 
     if (over && Deno.env.get("SENTRY_DSN")) {

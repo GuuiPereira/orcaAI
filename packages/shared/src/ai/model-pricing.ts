@@ -1,5 +1,8 @@
 // Preços da OpenAI, em centavos de dólar por 1.000.000 de tokens.
-// Fonte: tabela de preços da OpenAI, consultada em 2026-08-01. Preços de IA
+// Fonte: tabela de preços da OpenAI, consultada em 2026-08-01; a família
+// gpt-5.6 (sol/terra/luna, faixa "short context") foi conferida linha a linha
+// em 2026-09-24 (o sol tinha baixado de preço). Há também uma faixa "long
+// context" mais cara - nossos prompts são curtos, não a usamos. Preços de IA
 // mudam com frequência - revisar periodicamente. Usado para estimar
 // `estimated_cost_cents` em `ai_interpretations` (docs/ARCHITECTURE.md §11).
 export type ModelPricing = {
@@ -15,10 +18,10 @@ export type ModelPricing = {
 export const OPENAI_MODEL_PRICING: readonly ModelPricing[] = [
   {
     id: "gpt-5.6-sol",
-    inputCentsPer1M: 500,
-    cachedInputCentsPer1M: 50,
-    cacheWriteCentsPer1M: 625,
-    outputCentsPer1M: 3000,
+    inputCentsPer1M: 400,
+    cachedInputCentsPer1M: 40,
+    cacheWriteCentsPer1M: 500,
+    outputCentsPer1M: 2000,
   },
   {
     id: "gpt-5.6-terra",

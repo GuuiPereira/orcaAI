@@ -50,13 +50,13 @@ describe("estimateCostCents", () => {
   });
 
   it("prices cache-write tokens at the cache-write rate when the model has one", () => {
-    // gpt-5.6-sol: cache write 625c/1M
+    // gpt-5.6-sol: cache write 500c/1M
     const cost = estimateCostCents("gpt-5.6-sol", {
       input_tokens: 1_000_000,
       output_tokens: 0,
       input_tokens_details: { cache_write_tokens: 1_000_000 },
     });
-    expect(cost).toBe(625);
+    expect(cost).toBe(500);
   });
 
   it("falls back to the fresh-input rate for cache writes when the model has no cache-write price", () => {
