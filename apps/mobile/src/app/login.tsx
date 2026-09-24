@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { signInWithGoogle } from '@/lib/auth';
+import { reportError } from '@/lib/monitoring';
 
 export default function LoginScreen() {
   const theme = useTheme();
@@ -19,6 +20,7 @@ export default function LoginScreen() {
     try {
       await signInWithGoogle();
     } catch (error) {
+      reportError(error, 'google-login');
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setSigningIn(false);

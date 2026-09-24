@@ -33,5 +33,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     // apps/mobile/src/app/auth-callback.tsx). No nativo não existe URL
     // de página de verdade pra isso fazer sentido.
     detectSessionInUrl: Platform.OS === 'web',
+    // O padrão do supabase-js v2 é o fluxo implícito (tokens no hash do
+    // redirect), mas o login nativo (lib/auth.ts) troca um `code` por sessão
+    // - isso é PKCE. Sem esta linha o redirect volta sem `code` e o login
+    // nunca completa. O web continua no implícito, que é o que foi testado
+    // (auth-callback.tsx + detectSessionInUrl).
+    flowType: Platform.OS === 'web' ? 'implicit' : 'pkce',
   },
 });

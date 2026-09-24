@@ -24,11 +24,9 @@ function extensionFromMimeType(mimeType: string | null | undefined): string {
 // nunca deixa arquivo órfão pra trás. Devolve null se o usuário cancelou a
 // seleção.
 export async function pickAndUploadOrganizationLogo(organizationId: string): Promise<string | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error('Permissão de acesso às fotos negada.');
-  }
-
+  // Sem pedir permissão de propósito: launchImageLibraryAsync usa o seletor
+  // do sistema e a documentação diz que nenhuma permissão é necessária -
+  // exigir uma bloqueava o upload em quem negasse (ou em Androids novos).
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     quality: 0.8,

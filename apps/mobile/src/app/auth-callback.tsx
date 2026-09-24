@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,10 +8,11 @@ import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-// Só é alcançada no alvo web (redirecionamento de página inteira - ver
+// No web é o destino do redirecionamento de página inteira (ver
 // apps/mobile/src/lib/auth.web.ts). No nativo o retorno do login é
-// capturado direto pelo WebBrowser.openAuthSessionAsync, sem navegar
-// pra cá.
+// capturado por WebBrowser.openAuthSessionAsync, mas o Expo Router também
+// abre esta rota quando o Android entrega o deep link - aqui ela só segura
+// a tela ("Concluindo login…") até o gate em _layout.tsx sair dela.
 //
 // O GoTrue devolve os tokens direto no hash da URL
 // (`#access_token=...&refresh_token=...`, não `?code=`) pra provedores
@@ -21,7 +22,11 @@ import { useTheme } from '@/hooks/use-theme';
 // verdade, sem "Unmatched Route") pro navegador cair enquanto isso
 // acontece, e pra mostrar erro devolvido pelo provedor, se houver.
 function readErrorFromLocation(): string | null {
-  if (typeof window === 'undefined') return null;
+  // No React Native `window` existe, mas `window.location` não - sem esta
+  // checagem, abrir esta rota pelo deep link `mobile://auth-callback`
+  // (o Expo Router navega pra cá no nativo também) lança TypeError na
+  // renderização e derruba o app de release.
+  if (Platform.OS !== 'web' || typeof window === 'undefined' || !window.location) return null;
   const fromSearch = new URLSearchParams(window.location.search).get('error_description');
   if (fromSearch) return fromSearch;
   const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;

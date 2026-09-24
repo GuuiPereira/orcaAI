@@ -518,6 +518,35 @@ existiam antes: o `resolver.unstable_enableSymlinks` do Metro (necessário
 no monorepo pnpm), `eas-cli` como dependência do projeto e versões patch
 do Expo um pouco atrás - nenhum bloqueia o build.
 
+### Login com Google no aparelho - bugs achados no 1º APK (Task 9)
+
+O fluxo nativo de login só tinha sido testado no navegador. No primeiro APK
+o app **fechava** ao voltar do Google. Causas encontradas no código (não na
+configuração do Supabase/Google):
+
+1. **`supabase-js` v2 usa o fluxo implícito por padrão**, não PKCE - mesmo
+   o comentário antigo dizendo o contrário. `signInWithOAuth` sem
+   `flowType: 'pkce'` gera a URL **sem** `code_challenge` (confirmado
+   chamando o cliente), então o redirect volta com tokens no hash e nunca
+   com o `?code=` que `lib/auth.ts` espera. Agora `supabase.ts` usa PKCE no
+   nativo e mantém o implícito no web (é o que o `auth-callback.tsx` +
+   `detectSessionInUrl` já tratam).
+2. **`window` existe no React Native, `window.location` não.** A tela
+   `auth-callback.tsx` (o Expo Router também navega pra ela quando o Android
+   entrega o deep link `mobile://auth-callback`, apesar do comentário antigo)
+   lia `window.location.search` na renderização -> `TypeError` -> app de
+   release fecha. Agora só lê a localização no web.
+3. Falha de login agora vai pro Sentry (`area: google-login`).
+4. Bônus, achado na mesma leva: `expo-image-picker` **não precisa de
+   permissão** pra abrir a galeria (a documentação diz isso), mas o código
+   pedia e lançava erro se negada - bloqueava o upload do logo. Removido.
+
+**Como investigar um crash do APK sem cabo/`adb`:** o Sentry (projeto
+`orcaai-app`) recebe o crash - procure o issue no horário da tentativa.
+Esses bugs **não dá pra reproduzir no navegador**; corrigir exige um build
+novo. Quando o JS mudar sem mudança nativa, dá pra evitar novo build
+configurando o EAS Update (ainda não configurado).
+
 ### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
 
 Botão "Ver prévia do orçamento" no último passo do onboarding e no Perfil
