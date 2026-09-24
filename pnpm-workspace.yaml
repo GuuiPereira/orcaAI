@@ -5,3 +5,5 @@ allowBuilds:
   '@sentry/cli': true
   dtrace-provider: true
   unrs-resolver: true
+minimumReleaseAgeExclude:
+  - expo-image-manipulator@57.0.20

@@ -679,6 +679,72 @@ fora sem criar pedido nenhum: a rotina chamada pelo caminho do cron responde
 dá 401; a tabela de pedidos lida com a chave pública volta vazia. **Não teste
 a exclusão com a sua conta real** - use uma conta Google de teste.
 
+### Entrada por áudio e por imagem (Fase 4A)
+
+Na tela "Novo orçamento" há três jeitos de chegar ao texto: **digitar** (o
+padrão, igual a antes), **Falar** (grava e transcreve) e **Imagem** (foto/print
+com o texto do orçamento; no aparelho há também **Foto**, da câmera). Áudio e
+imagem só produzem **texto**: ele cai no mesmo campo, aparece um card
+"confira antes de continuar" (miniaturas da imagem e **valores em destaque** -
+inclusive por extenso, "dois mil e oitocentos reais") e o botão **Continuar
+fica travado até tocar em "Conferi o texto"** (RF-027: preço mal ouvido/lido
+não pode passar batido). Uma nova leitura **acrescenta** ao texto existente.
+
+| Peça | O que faz |
+| --- | --- |
+| `extract-input` (`auth: 'user'`) | `multipart`: `kind=audio` (+ `file`, `duration_ms`) ou `kind=image` (+ até 3 `file`). Áudio vai pro `gpt-transcribe` (pt, com dica pra escrever valores em algarismos); imagem vai pro modelo com visão (`OPENAI_MODEL`) que **só transcreve**. **Nada é guardado** - a mídia passa pela function e é descartada. Responde `{text, kind, units, truncated}`. |
+| `input_extractions` | Só metadados por chamada (tipo, segundos/nº de imagens, bytes, modelo, custo estimado, latência, status, código de erro). **Sem coluna de conteúdo**, sem policy pra usuário. Alimenta a Fase 5. |
+| Limites | Áudio ≤ 2 min / 8 MB, ≤ 3 imagens de ≤ 4 MB (o app reduz cada foto pra ~1600 px em JPEG antes de enviar), texto ≤ 4000 caracteres, **60 leituras/dia por organização** (`EXTRACTION_DAILY_LIMIT`). |
+| Erros (`code`) | `too_long` 400, `daily_limit` 429, `no_text` 422 (áudio sem fala / imagem sem texto legível) - o app mostra mensagem acionável; o resto vai pro Sentry (`audio-record`, `audio-extract`, `image-extract`) sem conteúdo. |
+
+**Privacidade:** o que **nós** guardamos é só a linha de métricas. A OpenAI
+recebe a mídia (voz e prints de conversa trazem dados de terceiros): as
+chamadas vão com `store: false` (também a `interpret-quote`) - **citar a
+retenção da OpenAI na política de privacidade**.
+
+**Testar a function (local, gasta centavos de OpenAI):**
+
+```bash
+# 1) stack local no ar + a function com o env (chave OpenAI, limite 5 pro teste do 429):
+printf 'OPENAI_API_KEY=...\nOPENAI_MODEL=gpt-5.6-luna\nEXTRACTION_DAILY_LIMIT=5\n' > /tmp/extract.env   # sem SENTRY_DSN
+pnpm exec supabase functions serve --env-file /tmp/extract.env
+# 2) numa pasta com media/{fala.mp3,bilhete.png,conversa.png,injecao.png,vazia.png}:
+python3 tools/extract-input-test.py <pasta>
+```
+
+Cobre 401/403/400, limite diário, áudio real, imagens (na ordem, ignorando
+horário/interface de app), **instrução embutida na imagem só é transcrita**,
+imagem em branco → 422, custo do áudio, ausência de coluna de conteúdo, RLS e
+conta com exclusão agendada bloqueada.
+
+**Testar a tela no navegador** (Chromium com microfone falso): `--use-fake-ui-for-media-stream
+--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=fala.wav`
+(WAV PCM - a gravação vira `webm`, que a function aceita). Sem o arquivo o
+microfone falso gera um bipe → a function responde `no_text`. Imagens: o
+seletor de arquivos aceita várias (`setFiles`). **Na web o `Alert.alert` do
+React Native não faz nada**, então os avisos de erro só se veem no aparelho;
+o botão **Foto** só existe no nativo.
+
+**O que só dá pra testar no aparelho:** permissão de microfone e de câmera
+(negar e conferir a mensagem), gravar com o app em segundo plano, formato
+`m4a` gravado pelo `expo-audio`, câmera de verdade, e a latência real
+(RNF-002).
+
+**Módulos nativos novos** (`expo-audio`, `expo-image-manipulator`, câmera do
+`expo-image-picker`; permissões no `app.json`): exigem **APK novo**, e o
+`version` do `app.json` foi para **1.1.0** - o `runtimeVersion` segue a
+versão, então APKs 1.0.0 antigos **não** recebem o JavaScript novo por
+`eas update` (que quebraria por falta do módulo nativo). Só publique `eas
+update` para o 1.1.0 depois de instalar o APK 1.1.0.
+
+**Armadilha - `pnpm typecheck`/`pnpm exec` recusando rodar** ("Command failed
+... pnpm install") depois de um `expo install`: o pnpm quer reinstalar por
+causa do store-dir diferente. Rode uma vez `CI=true pnpm --store-dir
+/home/guilherme/snap/code/252/.local/share/pnpm/store/v11 install` e, se ainda
+reclamar, chame direto `apps/mobile/node_modules/.bin/tsc --noEmit` e
+`CI=true apps/mobile/node_modules/.bin/expo lint`. (`expo install` também
+acrescenta `minimumReleaseAgeExclude` no `pnpm-workspace.yaml` - é esperado.)
+
 ### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
 
 Botão "Ver prévia do orçamento" no último passo do onboarding e no Perfil

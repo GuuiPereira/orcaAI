@@ -23,6 +23,22 @@ describe("findValueMentions", () => {
     expect(findValueMentions("Fica R$ 1.900.")).toEqual(["R$ 1.900"]);
   });
 
+  it("catches numbers written out in words, with the 'reais' that follows", () => {
+    expect(findValueMentions("Mão de obra dois mil e oitocentos reais, metade na entrada")).toEqual([
+      "dois mil e oitocentos reais",
+    ]);
+    expect(findValueMentions("Sala e três quartos, duas demãos, prazo de cinco dias")).toEqual([
+      "três",
+      "duas",
+      "cinco",
+    ]);
+    expect(findValueMentions("Cobro um milhão e meio")).toEqual(["um milhão e meio"]);
+  });
+
+  it("does not pick number words out of the middle of other words", () => {
+    expect(findValueMentions("Um dia umidade seiscentos? Não: mildade, ameixa")).toEqual(["Um", "seiscentos"]);
+  });
+
   it("returns nothing for text without numbers", () => {
     expect(findValueMentions("Pintura da casa da dona Maria")).toEqual([]);
   });

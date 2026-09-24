@@ -46,11 +46,20 @@ Regras obrigatórias:
 }
 
 // Valores que o usuário precisa conferir com mais atenção na revisão (o ponto
-// crítico - RF-027): dinheiro (R$ 2.800, 2.800 reais) e números soltos. Só
-// procura algarismos; a transcrição de áudio pede algarismos justamente por
-// isso (AUDIO_TRANSCRIPTION_PROMPT). Devolve sem repetição, na ordem em que
-// aparecem.
-const VALUE_PATTERN = /R\$\s?\d[\d.,]*|\d[\d.,]*\s?(?:reais|real|mil)\b|\d[\d.,]*/gi;
+// crítico - RF-027): dinheiro (R$ 2.800, 2.800 reais), números soltos e
+// números POR EXTENSO ("dois mil e oitocentos reais") - a transcrição de áudio
+// pede algarismos (AUDIO_TRANSCRIPTION_PROMPT), mas o modelo nem sempre
+// obedece, e um valor por extenso sem destaque passaria batido na conferência.
+// Devolve sem repetição, na ordem em que aparecem.
+const NUMBER_WORD =
+  "(?:zero|um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|catorze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|cento|duzentos|duzentas|trezentos|trezentas|quatrocentos|quatrocentas|quinhentos|quinhentas|seiscentos|seiscentas|setecentos|setecentas|oitocentos|oitocentas|novecentos|novecentas|mil|milhão|milhões|meio|meia)";
+const NOT_LETTER_BEFORE = "(?<![\\p{L}])";
+const NOT_LETTER_AFTER = "(?![\\p{L}])";
+const WORDS_VALUE = `${NOT_LETTER_BEFORE}${NUMBER_WORD}(?:\\s+(?:e\\s+)?${NUMBER_WORD})*${NOT_LETTER_AFTER}(?:\\s+(?:reais|real|centavos))?`;
+const VALUE_PATTERN = new RegExp(
+  `${WORDS_VALUE}|R\\$\\s?\\d[\\d.,]*|\\d[\\d.,]*\\s?(?:reais|real|mil)${NOT_LETTER_AFTER}|\\d[\\d.,]*`,
+  "giu",
+);
 
 export function findValueMentions(text: string): string[] {
   const seen = new Set<string>();

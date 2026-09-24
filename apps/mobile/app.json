@@ -2,7 +2,7 @@
   "expo": {
     "name": "OrçaAI",
     "slug": "orcaai",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
@@ -35,7 +35,21 @@
         }
       ],
       "expo-sharing",
-      "@sentry/react-native/expo"
+      "@sentry/react-native/expo",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "O OrçaAI usa o microfone para você falar a descrição do orçamento em vez de digitar."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O OrçaAI usa a câmera para você fotografar um bilhete ou anotação com o texto do orçamento.",
+          "photosPermission": "O OrçaAI acessa suas fotos para você escolher uma imagem ou print com o texto do orçamento.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
