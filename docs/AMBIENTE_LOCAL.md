@@ -452,6 +452,72 @@ curl http://127.0.0.1:54321/functions/v1/check-ai-cost -H "apikey: $SECRET"
 (`--store-dir`) da seção "Unexpected store location" vale também pro
 `pnpm install`.
 
+### Projeto hospedado (Supabase Cloud) e build de teste (Task 9 da Fase 2)
+
+Projeto `OrcaAI`, ref `rqdrwcrbcdrdxzfwtiwv`, região `sa-east-1`. A senha do
+banco fica só em `SUPABASE_DB_PASSWORD` no `.env.local` da **raiz** (ignorado
+pelo git); pra usar nos comandos: `set -a; . ./.env.local; set +a`.
+
+| O que | Comando |
+| --- | --- |
+| Ligar o repo ao projeto (sem senha) | `pnpm exec supabase login` e `pnpm exec supabase link --project-ref <ref>` |
+| Ver o que subiria (não aplica) | `pnpm exec supabase db push --dry-run` |
+| Aplicar migrações | `pnpm exec supabase db push` (o **seed não vai** - o banco hospedado começa vazio) |
+| Publicar as functions | `pnpm exec supabase functions deploy --project-ref <ref>` |
+| Secrets das functions | `pnpm exec supabase secrets set NOME=valor --project-ref <ref>` (ou `--env-file`) |
+| SQL no banco hospedado | `pnpm exec supabase db query --linked "select ..."` (ou `--file`) |
+| Chaves da API | `pnpm exec supabase projects api-keys --project-ref <ref> --reveal` |
+
+**Pegadinhas que apareceram:**
+- `projects api-keys` **mascara** a chave secret (`sb_secret_dj······`) - sem
+  `--reveal` ela parece válida mas dá "Invalid API key". A `check-ai-cost`
+  (`auth: 'secret'`) só aceita a chave **nova** `sb_secret_...`, não o
+  `service_role` JWT legado.
+- **Não use `supabase config push`** pra criar os buckets: ele empurra o
+  `config.toml` inteiro e sobrescreveria o que foi configurado no painel
+  (login com Google, Site URL, Redirect URLs). Os buckets `logos` e
+  `quote-pdfs` foram criados pela API do Storage (`POST /storage/v1/bucket`,
+  privados, com os limites do `config.toml`). `supabase seed buckets` não
+  mostra opção pra escolher o alvo, então não arrisquei.
+- **Cron do `check-ai-cost`:** `pg_cron` + `pg_net`, de hora em hora
+  (`check-ai-cost-hourly`), com a chave secret guardada no **Vault**
+  (`check_ai_cost_key`), nunca em texto no agendamento. Não é migração
+  (o agendamento carrega o ref do projeto e o segredo, e o banco local nem
+  tem o Vault com essa chave) - foi criado uma vez por
+  `db query --linked`. Pra conferir: `select * from cron.job;` e
+  `select status_code, content from net._http_response order by id desc limit 1;`.
+  Limite: `AI_DAILY_COST_LIMIT_CENTS=100` (US$ 1,00/dia).
+- **`.env.local` do app tem prioridade sobre variável de shell:** com o DSN
+  real do Sentry lá, passar `EXPO_PUBLIC_SENTRY_DSN=...` no comando do
+  Expo **não** troca o destino (nem `EXPO_NO_DOTENV=1` resolveu) - os testes
+  mandaram eventos pro projeto real. Pra testar o filtro sem enviar nada,
+  intercepte no navegador: `page.route(/sentry\.io/, r => { guarda o
+  postData; r.fulfill({status:200, body:'{}'}) })` no Playwright.
+- **Versão do `@sentry/react-native` tem que ser a do SDK:** `pnpm add`
+  pega a mais nova (8.x), mas o Expo SDK 57 espera `~7.11.0` - `npx
+  expo-doctor` acusa como "Major version mismatch". O `expo install` é o
+  jeito certo, mas falha com o problema do store do pnpm; nesse caso
+  `pnpm --store-dir <store antigo> add "@sentry/react-native@~7.11.0"`.
+
+**EAS (build de teste):** perfil `preview` em `apps/mobile/eas.json`
+(`distribution: internal`, APK, `SENTRY_DISABLE_AUTO_UPLOAD=true` até existir
+`SENTRY_AUTH_TOKEN`). Variáveis do ambiente `preview` no EAS
+(`eas env:set preview --name ... --value ... --visibility plaintext`):
+`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` (a chave
+**publicável** do projeto hospedado) e `EXPO_PUBLIC_SENTRY_DSN` - todas
+públicas por natureza (vão dentro do app). Gerar o APK:
+
+```bash
+cd apps/mobile && pnpm exec eas build --platform android --profile preview
+```
+
+Na **primeira** vez o EAS pergunta se gera a chave de assinatura Android
+(keystore) - responda que sim; isso só funciona interativo, por isso o
+comando é seu, não de um script. `expo-doctor` ainda aponta 3 itens que já
+existiam antes: o `resolver.unstable_enableSymlinks` do Metro (necessário
+no monorepo pnpm), `eas-cli` como dependência do projeto e versões patch
+do Expo um pouco atrás - nenhum bloqueia o build.
+
 ### Prévia com os dados do perfil e logo no PDF (Task 2/6 da Fase 2)
 
 Botão "Ver prévia do orçamento" no último passo do onboarding e no Perfil
