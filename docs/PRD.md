@@ -182,7 +182,10 @@ propõe dados, mas nunca é a autoridade dos cálculos.
 - aprovação por link público;
 - múltiplos usuários por empresa;
 - integração oficial com WhatsApp Business;
-- leitura automática de plantas ou fotos;
+- leitura automática de plantas ou fotos do serviço (a leitura do **texto** de
+  uma imagem que o próprio usuário envia como entrada - foto de um bilhete,
+  print de conversa - é diferente e entra na Fase 4A, ver
+  `.tasks/fase-4-evolucoes.md`);
 - precificação automática baseada no mercado;
 - funcionamento totalmente offline;
 - versão web administrativa completa.
@@ -334,7 +337,10 @@ Perguntas-chave:
 ## 15. Decisões pendentes
 
 - O primeiro acesso será por e-mail ou telefone?
-- Áudio entra no MVP ou na primeira evolução?
+- ~~Áudio entra no MVP ou na primeira evolução?~~ **Decidido (2026-09-24):**
+  entra antes do fim do teste fechado, como entrada alternativa ao texto
+  (áudio e imagem com o texto do orçamento; sempre com revisão do texto
+  extraído antes de interpretar) - ver `.tasks/fase-4-evolucoes.md`.
 - O profissional precisa separar mão de obra e material em todos os casos?
 - Endereço da obra pertence ao cliente ou ao orçamento?
 - Deve existir campo para área em m² com preço unitário?
