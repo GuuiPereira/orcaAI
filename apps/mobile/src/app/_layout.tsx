@@ -44,12 +44,16 @@ function RootLayout() {
     } else if (status === 'pending-deletion') {
       // Conta agendada pra exclusão (Task 7): só a tela de cancelar/sair.
       if (current !== 'pending-deletion') router.replace('/pending-deletion');
+    } else if (status === 'suspended') {
+      // Organização suspensa pelo admin da plataforma (Fase 6): só o aviso.
+      if (current !== 'suspended') router.replace('/suspended');
     } else if (status === 'ready') {
       if (
         current === 'login' ||
         current === 'onboarding' ||
         current === 'auth-callback' ||
-        current === 'pending-deletion'
+        current === 'pending-deletion' ||
+        current === 'suspended'
       ) {
         router.replace('/');
       }

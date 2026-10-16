@@ -18,6 +18,31 @@ export async function getCurrentOrganizationId(): Promise<string | null> {
   return data?.organization_id ?? null;
 }
 
+// Usado pelo gate de entrada (hooks/use-auth-gate.ts): a organização do
+// usuário e se ela foi suspensa pelo admin da plataforma (Fase 6) - a
+// própria organização pode ler o `suspended_at` dela (RLS), só não alterar.
+export async function getCurrentOrganizationAccess(): Promise<{
+  organizationId: string | null;
+  suspendedAt: string | null;
+}> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { organizationId: null, suspendedAt: null };
+
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('organization_id, organizations(suspended_at)')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  const organization = data?.organizations as { suspended_at: string | null } | null | undefined;
+  return { organizationId: data?.organization_id ?? null, suspendedAt: organization?.suspended_at ?? null };
+}
+
 export type OrganizationAddress = {
   street: string;
   number: string;

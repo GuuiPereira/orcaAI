@@ -97,6 +97,14 @@ async function extractFunctionErrorMessage(error: unknown, fallback: string): Pr
     if (context && typeof context.json === 'function') {
       try {
         const body = await context.json();
+        // Fase 6: recusas que o usuário precisa entender (as functions
+        // respondem com `code` fixo e mensagem em inglês).
+        if (body?.code === 'organization_suspended') {
+          return 'Sua conta está suspensa. Fale com o suporte do OrçaAI.';
+        }
+        if (body?.code === 'daily_limit') {
+          return 'Você chegou ao limite de interpretações das últimas 24 horas. Tente de novo mais tarde.';
+        }
         if (body && typeof body.message === 'string') return body.message;
       } catch {
         // resposta não era JSON - cai para a mensagem genérica abaixo.

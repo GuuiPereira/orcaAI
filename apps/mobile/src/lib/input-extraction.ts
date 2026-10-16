@@ -38,8 +38,11 @@ async function errorFromResponse(error: unknown, kind: ExtractionKind): Promise<
       }
       if (body.code === 'daily_limit') {
         return new ExtractionUserError(
-          'Você chegou ao limite de leituras de hoje. Digite o texto ou tente de novo amanhã.',
+          'Você chegou ao limite de leituras das últimas 24 horas. Digite o texto ou tente de novo mais tarde.',
         );
+      }
+      if (body.code === 'organization_suspended') {
+        return new ExtractionUserError('Sua conta está suspensa. Fale com o suporte do OrçaAI.');
       }
       if (body.code === 'no_text') {
         return new ExtractionUserError(

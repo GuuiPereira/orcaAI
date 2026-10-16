@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import {
 import { notifyOrganizationChanged } from '@/hooks/use-auth-gate';
 import { BottomTabInset, Spacing, WebTopBarInset } from '@/constants/theme';
 import { requestAccountDeletion } from '@/lib/account-deletion';
+import { isPlatformAdmin } from '@/lib/admin';
 import { signOut } from '@/lib/auth';
 import {
   getCurrentOrganizationId,
@@ -113,6 +115,13 @@ export default function ProfileScreen() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
+  // Fase 6: o link do painel admin só aparece pra admin da plataforma (o
+  // banco recusa qualquer outro de qualquer jeito).
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    isPlatformAdmin().then(setIsAdmin).catch(() => setIsAdmin(false));
+  }, []);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -368,6 +377,12 @@ export default function ProfileScreen() {
             </Button>
           </>
         ) : null}
+
+        {isAdmin && (
+          <Button mode="outlined" icon="shield-account-outline" onPress={() => router.push('/admin')}>
+            Painel admin
+          </Button>
+        )}
 
         <Button onPress={() => signOut()}>Sair</Button>
 
