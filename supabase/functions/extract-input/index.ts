@@ -7,6 +7,11 @@ import {
   organizationSuspendedResponse,
   quotaUnavailableResponse,
 } from "../_shared/quota.ts";
+import {
+  entitlementsUnavailableResponse,
+  getOrganizationEntitlements,
+  planFeatureResponse,
+} from "../_shared/plan.ts";
 import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   AI_EXTRACTION_PROMPT_VERSION,
@@ -191,6 +196,10 @@ export default {
     const quota = await getOrganizationQuota(ctx.supabaseAdmin, organizationId);
     if (!quota) return quotaUnavailableResponse();
     if (quota.suspended) return organizationSuspendedResponse();
+    // Fase 3 - planos: áudio/imagem é recurso do Profissional.
+    const entitlements = await getOrganizationEntitlements(ctx.supabaseAdmin, organizationId);
+    if (!entitlements) return entitlementsUnavailableResponse();
+    if (!entitlements.audio_image_input) return planFeatureResponse();
     if (quota.extractions_24h >= quota.daily_extractions) return dailyLimitResponse();
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");

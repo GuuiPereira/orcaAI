@@ -7,6 +7,11 @@ import {
   organizationSuspendedResponse,
   quotaUnavailableResponse,
 } from "../_shared/quota.ts";
+import {
+  entitlementsUnavailableResponse,
+  getOrganizationEntitlements,
+  planLimitResponse,
+} from "../_shared/plan.ts";
 import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   calculateQuoteTotals,
@@ -157,6 +162,20 @@ export default {
     }
 
     const isFirstEmission = quote.number === null;
+
+    // Fase 3 - planos: o Gratuito tem um limite de orçamentos emitidos por mês.
+    // Só a 1ª emissão conta (reemitir um orçamento que já tem número não é
+    // barrado) - e só chega aqui o que não é reemissão idêntica (acima).
+    if (isFirstEmission) {
+      const entitlements = await getOrganizationEntitlements(ctx.supabaseAdmin, quote.organization_id);
+      if (!entitlements) return entitlementsUnavailableResponse();
+      if (
+        entitlements.monthly_issued_quotes !== null &&
+        entitlements.issued_this_month >= entitlements.monthly_issued_quotes
+      ) {
+        return planLimitResponse();
+      }
+    }
     let number = quote.number;
     if (isFirstEmission) {
       // Regra de negócio 4: só ganha número novo na emissão, nunca no
