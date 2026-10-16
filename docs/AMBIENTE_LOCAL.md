@@ -698,7 +698,7 @@ tentar de novo ou excluir.
 | --- | --- |
 | `extract-input` (`auth: 'user'`) | `multipart`: `kind=audio` (+ `file`, `duration_ms`) ou `kind=image` (+ até 3 `file`). Áudio vai pro `gpt-transcribe` (pt, com dica pra escrever valores em algarismos); imagem vai pro modelo com visão (`OPENAI_MODEL`) que **só transcreve**. **Nada é guardado** - a mídia passa pela function e é descartada. Responde `{text, kind, units, truncated}`. |
 | `input_extractions` | Só metadados por chamada (tipo, segundos/nº de imagens, bytes, modelo, custo estimado, latência, status, código de erro). **Sem coluna de conteúdo**, sem policy pra usuário. Alimenta a Fase 5. |
-| Limites | Áudio ≤ 2 min / 8 MB, ≤ 3 imagens de ≤ 4 MB (o app reduz cada foto pra ~1600 px em JPEG antes de enviar), texto ≤ 4000 caracteres, **60 leituras/dia por organização** (`EXTRACTION_DAILY_LIMIT`). |
+| Limites | Áudio ≤ 2 min / 8 MB, ≤ 3 imagens de ≤ 4 MB (o app reduz cada foto pra ~1600 px em JPEG antes de enviar), texto ≤ 4000 caracteres, **60 leituras a cada 24h por organização** (padrão no banco, `organization_ai_quota`; ajustável por organização no painel admin - Fase 6). |
 | Erros (`code`) | `too_long` 400, `daily_limit` 429, `no_text` 422 (áudio sem fala / imagem sem texto legível) - o app mostra mensagem acionável; o resto vai pro Sentry (`audio-record`, `audio-extract`, `image-extract`) sem conteúdo. |
 
 **Privacidade:** o que **nós** guardamos é só a linha de métricas. A OpenAI
@@ -709,8 +709,9 @@ retenção da OpenAI na política de privacidade**.
 **Testar a function (local, gasta centavos de OpenAI):**
 
 ```bash
-# 1) stack local no ar + a function com o env (chave OpenAI, limite 5 pro teste do 429):
-printf 'OPENAI_API_KEY=...\nOPENAI_MODEL=gpt-5.6-luna\nEXTRACTION_DAILY_LIMIT=5\n' > /tmp/extract.env   # sem SENTRY_DSN
+# 1) stack local no ar + a function com o env (chave OpenAI; o teste põe o limite 5 da
+#    organização de teste direto no banco, em organization_limits):
+printf 'OPENAI_API_KEY=...\nOPENAI_MODEL=gpt-5.6-luna\n' > /tmp/extract.env   # sem SENTRY_DSN
 pnpm exec supabase functions serve --env-file /tmp/extract.env
 # 2) numa pasta com media/{fala.mp3,bilhete.png,conversa.png,injecao.png,vazia.png}:
 python3 tools/extract-input-test.py <pasta>
@@ -814,6 +815,87 @@ insert into quote_events (quote_id, event_type, actor_user_id)
 -- 'new row violates row-level security policy'.
 "
 ```
+
+### Painel admin (Fase 6)
+
+`.tasks/fase-6-panel-admin.md`. Área **dentro do app** (`/admin`, link
+"Painel admin" no Perfil) para o administrador da plataforma **agir** sobre
+as contas - o Grafana continua sendo pra analisar. Funciona no celular e no
+navegador local. **Nunca mostra conteúdo de orçamento** (texto, itens, nomes,
+telefones, e-mails): só contagens, custos estimados, estados, códigos de erro
+e tipos de evento.
+
+| O que o admin faz | Efeito |
+| --- | --- |
+| Ver a lista de organizações | uso e limite de IA nas últimas 24h, custo de 30 dias, último acesso, estados (suspensa, exclusão agendada, interpretação presa, limite próprio) |
+| Ver o detalhe de uma | resumo, uso por dia (30 dias), erros recentes (só o código), linha do tempo (tipo de evento + nº do orçamento), membros (id curto + papel), ações de admin naquela conta |
+| **Ajustar limite de IA** | por organização, a cada 24h: interpretações (padrão **100**) e leituras de áudio/imagem (padrão **60**); campo vazio = padrão. `interpret-quote`/`extract-input` respondem `429 daily_limit` acima disso |
+| **Suspender / reativar** | suspensa, a organização só vê a tela "Sua conta está suspensa" e `interpret-quote`/`extract-input`/`issue-quote` respondem `403 organization_suspended`. **Nada é apagado.** O membro não consegue tirar a própria suspensão (trigger em `organizations`) |
+| **Destravar interpretação presa** | marca como falha as que ficaram em `processando` há mais de 10 min (a function caiu no meio e o orçamento respondia 409 pra sempre); o usuário pede de novo |
+
+Toda ação pede um **motivo** e grava a mudança + a linha de auditoria
+(`admin_actions`) **na mesma transação** - não existe ação sem registro, e
+ação recusada não deixa registro. A auditoria é append-only (nem a
+`service_role` altera/apaga) e sobrevive à exclusão da organização (perde só
+o vínculo).
+
+**Como funciona por baixo:** funções `security definer` no banco chamadas
+por `rpc` (`admin_list_organizations`, `admin_organization_detail`,
+`admin_set_limits`, `admin_suspend_organization`,
+`admin_reactivate_organization`, `admin_unstick_interpretations`), todas
+começando por `assert_platform_admin()` - quem não é admin recebe 403. Os
+erros usam status próprio (`PT400` motivo/limite inválido, `PT404`
+organização, `PT409` nada a fazer). Os padrões 100/60 moram no banco
+(`organization_ai_quota`); `lib/admin.ts` só espelha os números pra rotular
+o campo vazio - mudou lá, mude aqui.
+
+**Virar admin / deixar de ser** (não há tela pra isso, de propósito, e o id
+de ninguém entra nas migrações):
+
+```bash
+# hospedado
+pnpm exec supabase db query --linked "insert into platform_admins (user_id) select id from auth.users where email = '<seu-email>';"
+pnpm exec supabase db query --linked "delete from platform_admins where user_id = (select id from auth.users where email = '<email>');"
+
+# local
+docker exec supabase_db_orcaai psql -U postgres -d postgres -c "insert into platform_admins (user_id) select id from auth.users where email = '<email>';"
+```
+
+O link "Painel admin" aparece na próxima vez que o Perfil abrir. Recomendado:
+verificação em duas etapas ligada na conta Google do admin (o login é pelo
+Google, não há 2FA próprio).
+
+**Testar** (`tools/admin-panel-test.py`, 3 passos e ~60 verificações; quase
+tudo sem gastar IA):
+
+```bash
+pnpm exec supabase functions serve --env-file supabase/functions/interpret-quote/.env.local
+python3 tools/admin-panel-test.py
+```
+
+Cobre: só o admin chama as funções (usuário comum 403, sem login 401);
+ninguém lê `platform_admins`/`admin_actions` pela API nem se promove a
+admin; auditoria append-only; o detalhe não vaza conteúdo (a conta comum é
+semeada com cliente, telefone e texto sensíveis e o teste procura cada um);
+limite estoura as duas functions sem chamar a IA e volta ao padrão; suspensão
+bloqueia as três functions, o membro não se reativa mas segue editando o
+perfil e lendo os dados; destravar só pega o que passou de 10 min; ações
+recusadas não viram auditoria.
+
+**Armadilhas achadas:**
+
+- **Tabela nova no `public` já nasce com privilégio pra `anon`/`authenticated`**
+  (TRUNCATE, REFERENCES, TRIGGER - `\ddp` mostra o padrão deste Supabase), e
+  **função nova não é executável por ninguém além do dono**. Nas tabelas e
+  funções do painel tudo é revogado e concedido explicitamente.
+- O PostgREST só traduz pra status HTTP os erros `PTxxx` - um `P0002`
+  (`no_data_found`) virou **500**, não 404.
+- Mudar as colunas de retorno de uma função SQL (`returns table`) exige
+  `drop` + `create` - e o `drop` leva os grants junto.
+- Na web, o `TextInput` do Paper não expõe o rótulo como rótulo acessível: no
+  Playwright, localize por ordem (`getByRole('textbox').nth(i)`). E o `fill`
+  do Playwright deixa o rótulo sobreposto ao valor; digitando de verdade ele
+  sobe normalmente.
 
 ### Painel de operação no Grafana (Fase 5)
 

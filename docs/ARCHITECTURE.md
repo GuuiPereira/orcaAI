@@ -285,7 +285,9 @@ por rascunhos abandonados.
 - Usar RLS em todas as tabelas multiempresa.
 - Usar buckets privados e URLs assinadas para PDFs.
 - Não registrar conteúdo integral em analytics ou rastreamento de erros.
-- Aplicar rate limit por usuário e organização.
+- Aplicar rate limit por usuário e organização. (Implementado na Fase 6: limite
+  de interpretações e de leituras de áudio/imagem por organização a cada 24h,
+  com padrão no banco e ajuste pelo painel admin; suspensão de organização.)
 - Registrar eventos críticos sem expor conteúdo pessoal.
 - Criar plano de resposta a incidentes.
 
