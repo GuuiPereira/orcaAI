@@ -869,9 +869,9 @@ Grafana - nada mais precisa de redeploy.
 **Conexão do Grafana (hospedado):** use o **Session pooler** (a doc do
 Supabase recomenda pra ferramenta de BI: aceita prepared statements e é
 IPv4 em todos os planos - a conexão direta `db.<ref>.supabase.co` é só IPv6
-sem o add-on pago). Host: copie do painel (Project Settings > Database >
-Connection string > Session pooler - o host **não** dá pra deduzir só da
-região); porta `5432`; usuário `grafana_reader.rqdrwcrbcdrdxzfwtiwv` (papel
+sem o add-on pago). Host: `aws-0-sa-east-1.pooler.supabase.com` (copiado do painel: botão
+**Connect** → aba **Direct** → **Session pooler** - o host **não** dá pra
+deduzir só da região); porta `5432`; usuário `grafana_reader.rqdrwcrbcdrdxzfwtiwv` (papel
 customizado no pooler = `<papel>.<ref>`); banco `postgres`; SSL `require`.
 
 **Passo 4 - dashboard** (`ops/grafana/orcaai-operacao.json`, versionado - a
