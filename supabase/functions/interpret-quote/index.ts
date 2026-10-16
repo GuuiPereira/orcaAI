@@ -9,7 +9,7 @@ import {
   AI_PROMPT_VERSION,
   aiInterpretationResultSchema,
   buildInterpretationPrompt,
-  estimateCostCents,
+  estimateCostCentsExact,
   findModelPricing,
   type AiInterpretationResult,
   type ResponsesApiUsage,
@@ -215,7 +215,7 @@ export default {
         result,
         uncertain_fields: deriveUncertainFields(result),
         usage: openAiPayload.usage ?? null,
-        estimated_cost_cents: estimateCostCents(openAiModel, openAiPayload.usage),
+        estimated_cost_cents: estimateCostCentsExact(openAiModel, openAiPayload.usage),
         latency_ms: latencyMs,
       })
       .eq("id", interpretation.id);

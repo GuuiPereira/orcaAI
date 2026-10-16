@@ -57,6 +57,8 @@ print("        ai_interpretations:", row)
 uid_col, latency_col, status_col = row.split("|")
 ok("user_id gravado bate com quem chamou", uid_col == A["uid"], uid_col)
 ok("latency_ms é um número > 0", latency_col.isdigit() and int(latency_col) > 0, latency_col)
+cost = psql(f"select estimated_cost_cents from ai_interpretations where quote_id='{quote_id}' order by created_at desc limit 1")
+ok("custo exato gravado (não arredonda pra 0)", cost != "" and float(cost) > 0, cost)
 
 ai_items = d["result"]["items"]
 print("        itens da IA:", json.dumps(ai_items, ensure_ascii=False))
