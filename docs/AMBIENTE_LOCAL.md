@@ -816,6 +816,73 @@ insert into quote_events (quote_id, event_type, actor_user_id)
 "
 ```
 
+### Planos: Gratuito e Profissional (Fase 3)
+
+`.tasks/fase-3-planos.md`. **Cobrança manual nesta etapa:** você recebe por
+fora (Pix ou link de pagamento) e ativa o plano no painel admin; pagamento
+automático só quando o app for pra loja (etapa 2 da task).
+
+| | Gratuito | Profissional |
+| --- | --- | --- |
+| Orçamentos emitidos | **3 por mês** (mês civil, fuso de Brasília; só a 1ª emissão conta, reemitir não) | sem limite |
+| PDF | rodapé discreto "Feito com OrçaAI", **sem o logo** (o upload continua; o logo fica guardado) | sem rodapé, com logo |
+| Falar / Foto / Imagem | com cadeado (o toque explica o Profissional) | liberado |
+
+Os limites de 24h da Fase 6 (100 interpretações / 60 leituras) continuam
+valendo nos dois, como freio anti-abuso.
+
+**Como funciona:**
+
+- `plans` guarda o que cada plano libera - **ajuste sem deploy**, ex.:
+  `pnpm exec supabase db query --linked "update plans set monthly_issued_quotes = 5 where code = 'gratuito';"`
+- `organization_subscriptions`: sem linha = Gratuito; **venceu = volta ao
+  Gratuito sozinho** (calculado na leitura, sem rotina agendada).
+- `plan_settings`: **plano de quem se cadastrar** - hoje **Profissional** (teste
+  fechado). Quando o teste acabar: painel admin → "Quem se cadastrar entra
+  no..." → **Alterar** → Gratuito. Não mexe em quem já existe.
+- `organization_entitlements` (functions/painel) e `my_entitlements` (o app,
+  só a própria organização) dizem o plano efetivo e o que ele libera.
+- **Onde é aplicado:** `issue-quote` recusa a 1ª emissão acima do limite
+  (`403 plan_limit`); `extract-input` recusa áudio/imagem no Gratuito (`403
+  plan_feature`) - os dois antes de qualquer chamada à IA. O rodapé e o logo
+  são decididos **no aparelho** (o PDF é montado lá) - um app adulterado
+  poderia tirar o rodapé; aceitável, a barreira que importa (emissão) é no
+  servidor. Se o app não conseguir ler o plano, ele fica permissivo.
+- **Transição (migração `20261016043029`):** toda organização que já existia
+  virou Profissional **sem vencimento** - nada mudou pra quem já usava.
+
+**Ativar um assinante (o fluxo do dia a dia):** painel admin → organização →
+**Definir plano** → Profissional, validade em dias (ex.: 30; vazio = não
+vence) e o motivo (ex.: "Pix de outubro") → Confirmar. Vai pra auditoria.
+O app da pessoa mostra o plano novo na próxima vez que o Perfil ou a tela
+de orçamento abrir.
+
+**Testar:**
+
+```bash
+pnpm exec supabase functions serve --env-file supabase/functions/interpret-quote/.env.local
+python3 tools/plans-test.py   # 34 verificações, não gasta IA
+```
+
+Cobre: org nova no plano de cadastro; ninguém lê `plans`/assinaturas pela
+API, nem consulta os direitos de outra organização, nem se dá um plano;
+Gratuito recusa áudio/imagem e a 4ª emissão do mês, mas reemitir passa e não
+conta; Profissional com validade emite além do limite; vencido volta ao
+Gratuito; emissões do mês passado não contam; plano de cadastro (Gratuito ->
+org nova sem assinatura; Profissional com validade -> org nova herda);
+auditoria só das ações aceitas.
+
+**Armadilhas achadas:**
+
+- O Supabase recusa `UPDATE` sem `WHERE` (extensão `safeupdate`) até numa
+  tabela de uma linha só - `plan_settings` usa `where id`.
+- **`CI=true` desliga o recarregamento do Metro** ("reloads are disabled"):
+  testando a web com `CI=true expo start`, toda mudança de código exige
+  reiniciar o Expo - senão o navegador continua com o pacote antigo e parece
+  que a correção não funcionou.
+- Na web o expo-router mantém a tela anterior no DOM: ao ler o texto da
+  página num teste, a lista e o detalhe aparecem juntos.
+
 ### Painel admin (Fase 6)
 
 `.tasks/fase-6-panel-admin.md`. Área **dentro do app** (`/admin`, link
