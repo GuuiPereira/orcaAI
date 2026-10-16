@@ -91,6 +91,47 @@ st, d = http("POST", "/rest/v1/admin_actions", None,
              {"admin_user_id": A["uid"], "action": "apagar_tudo", "organization_id": B["org"], "reason": "ação inventada"}, apikey=SECRET)
 ok("ação fora da lista é recusada", st == 400, f"{st} {d}")
 
+# ---------------------------------------------------------------- passo 2
+print("== passo 2: leitura do painel, só metadados")
+# Conteúdo sensível na conta B - nada disso pode sair na resposta do painel.
+SECRET_TEXT = "Pintura da casa da Dona Josefina Sensivel, rua Secreta 123"
+http("POST", "/rest/v1/customers", B["token"],
+     {"organization_id": B["org"], "name": "Josefina Sensivel", "phone": "11 97777-1234", "email": "josefina@segredo.com"})
+http("POST", "/rest/v1/quotes", B["token"], {"organization_id": B["org"], "source_text": SECRET_TEXT, "status": "rascunho"})
+quote_b = http("GET", f"/rest/v1/quotes?organization_id=eq.{B['org']}&select=id", B["token"])[1][0]["id"]
+http("POST", "/rest/v1/quote_events", B["token"], {"quote_id": quote_b, "event_type": "criado"})
+psql(f"insert into ai_interpretations (quote_id, status, error) values ('{quote_b}', 'falhou', 'ai_request_failed')")
+psql(f"insert into input_extractions (organization_id, kind, model, status, error) values ('{B['org']}', 'audio', 'gpt-transcribe', 'falhou', 'no_text')")
+
+st, d = http("POST", "/rest/v1/rpc/admin_list_organizations", A["token"], {})
+row_b = next((r for r in d if r["organization_id"] == B["org"]), None) if st == 200 else None
+ok("admin lista as organizações", st == 200 and row_b is not None, f"{st}")
+ok("lista traz contagens de B (1 orçamento, 1 interpretação, 1 leitura)",
+   row_b and row_b["quotes_total"] == 1 and row_b["interpretations_30d"] == 1 and row_b["extractions_30d"] == 1, str(row_b))
+st, d = http("POST", "/rest/v1/rpc/admin_list_organizations", B["token"], {})
+ok("usuário comum NÃO lista organizações", st == 403, f"{st} {d}")
+st, d = http("POST", "/rest/v1/rpc/admin_list_organizations", None, {})
+ok("sem login NÃO lista organizações", st in (401, 403), str(st))
+
+st, detail = http("POST", "/rest/v1/rpc/admin_organization_detail", A["token"], {"target_organization_id": B["org"]})
+ok("admin abre o detalhe de B", st == 200 and isinstance(detail, dict), f"{st}")
+if st == 200:
+    ok("detalhe tem as seções esperadas",
+       set(detail) == {"organization", "members", "daily", "recent_errors", "timeline", "admin_actions"}, str(sorted(detail)))
+    ok("uso diário cobre 30 dias", len(detail["daily"]) == 30, str(len(detail["daily"])))
+    ok("erros recentes trazem só o código (interpretação e áudio)",
+       {e["code"] for e in detail["recent_errors"]} == {"ai_request_failed", "no_text"}, str(detail["recent_errors"]))
+    ok("linha do tempo traz o evento 'criado'", any(e["event"] == "criado" for e in detail["timeline"]), str(detail["timeline"]))
+    ok("a ação de admin do passo 1 aparece no detalhe", any(a["action"] == "suspend" for a in detail["admin_actions"]))
+    dump = json.dumps(detail, ensure_ascii=False)
+    leaked = [s for s in ("Josefina", "97777", "segredo.com", "Secreta", SECRET_TEXT, B["email"]) if s in dump]
+    ok("NENHUM conteúdo sai no detalhe (texto, cliente, telefone, e-mail)", leaked == [], str(leaked))
+st, d = http("POST", "/rest/v1/rpc/admin_organization_detail", B["token"], {"target_organization_id": B["org"]})
+ok("usuário comum NÃO abre detalhe (nem da própria organização)", st == 403, f"{st} {d}")
+st, d = http("POST", "/rest/v1/rpc/admin_organization_detail", A["token"],
+             {"target_organization_id": "00000000-0000-4000-8000-000000000000"})
+ok("organização inexistente dá 404", st == 404, f"{st} {d}")
+
 print()
 print("RESULTADO:", "TUDO OK" if ok.failed == 0 else f"{ok.failed} FALHA(S)")
 sys.exit(1 if ok.failed else 0)
