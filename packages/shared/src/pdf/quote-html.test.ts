@@ -159,6 +159,31 @@ describe("buildQuoteHtml - per-type item tables", () => {
   });
 });
 
+describe("buildQuoteHtml - unit column only for materials", () => {
+  it("omits the Unidade column for services, even when the item has a unit value", () => {
+    const withServiceUnit: PdfItem[] = [
+      { type: "service", description: "Pintura", category: null, quantity: "1", unit: "quarto", total_price_cents: 20000 },
+    ];
+    const html = buildQuoteHtml({ ...baseInput, items: withServiceUnit, mode: "service" });
+    expect(html).not.toContain("<th>Unidade</th>");
+    expect(html).not.toContain("<td>quarto</td>");
+  });
+
+  it("keeps the Unidade column for materials that have a unit", () => {
+    const html = buildQuoteHtml({ ...baseInput, mode: "material" });
+    expect(html).toContain("<th>Unidade</th>");
+    expect(html).toContain("litros");
+  });
+
+  it("omits the Unidade column for materials when none of them has a unit", () => {
+    const unitless: PdfItem[] = [
+      { type: "material", description: "Cimento", category: null, quantity: null, unit: null, total_price_cents: 1000 },
+    ];
+    const html = buildQuoteHtml({ ...baseInput, items: unitless, mode: "material" });
+    expect(html).not.toContain("<th>Unidade</th>");
+  });
+});
+
 describe("buildQuoteHtml - summary with unpriced items", () => {
   it("shows a notice instead of totals when nothing in the document has a price", () => {
     const unpriced: PdfItem[] = [

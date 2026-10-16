@@ -87,19 +87,19 @@ function formatDatePtBR(date: Date): string {
 // completo, mas se aparecer, vem por último.
 const TYPE_ORDER: readonly QuoteItemType[] = ["service", "material", "other"];
 
-function buildItemRowHtml(item: PdfItem, showValueColumn: boolean): string {
+function buildItemRowHtml(item: PdfItem, showUnitColumn: boolean, showValueColumn: boolean): string {
   const qty = item.quantity ? escapeHtml(item.quantity) : "-";
-  const unit = item.unit ? escapeHtml(item.unit) : "-";
   const categoryLine = item.category
     ? `<br /><small class="muted">${escapeHtml(item.category)}</small>`
     : "";
+  const unitCell = showUnitColumn ? `<td>${item.unit ? escapeHtml(item.unit) : "-"}</td>` : "";
   const valueCell = showValueColumn
     ? `<td class="value">${item.total_price_cents !== null ? formatCentsAsBRL(item.total_price_cents) : "-"}</td>`
     : "";
   return `<tr>
     <td>${escapeHtml(item.description)}${categoryLine}</td>
     <td>${qty}</td>
-    <td>${unit}</td>
+    ${unitCell}
     ${valueCell}
   </tr>`;
 }
@@ -110,16 +110,24 @@ function buildItemRowHtml(item: PdfItem, showValueColumn: boolean): string {
 // preço: é o caso comum de material por conta do cliente (RF-027 - a IA
 // nunca inventa preço, e aqui a ausência dele é uma opção de negócio
 // válida, não um dado faltando).
+//
+// A coluna "Unidade" só existe na tabela de materiais (decisão do usuário,
+// 2026-10-15): "1 quarto" como unidade de um serviço não faz sentido -
+// unidade é uma medida (litros, m², sacos), algo que só material tem. Some
+// também se nenhum material do grupo tiver unidade preenchida, mesmo
+// critério da coluna "Valor".
 function buildItemsTableHtml(typeItems: readonly PdfItem[], type: QuoteItemType): string {
+  const showUnitColumn = type === "material" && typeItems.some((item) => item.unit);
   const hasAnyPrice = typeItems.some((item) => item.total_price_cents !== null);
-  const rows = typeItems.map((item) => buildItemRowHtml(item, hasAnyPrice)).join("");
+  const rows = typeItems.map((item) => buildItemRowHtml(item, showUnitColumn, hasAnyPrice)).join("");
+  const columnsBeforeValue = showUnitColumn ? 3 : 2;
   const subtotalRow = hasAnyPrice
-    ? `<tr><td colspan="3">Subtotal</td><td class="value">${formatCentsAsBRL(sumItemTotals(typeItems))}</td></tr>`
+    ? `<tr><td colspan="${columnsBeforeValue}">Subtotal</td><td class="value">${formatCentsAsBRL(sumItemTotals(typeItems))}</td></tr>`
     : "";
   return `<h2>${escapeHtml(QUOTE_ITEM_TYPE_LABELS[type])}</h2>
   <table>
     <thead>
-      <tr><th>Descrição</th><th>Qtd.</th><th>Unidade</th>${hasAnyPrice ? '<th class="value">Valor</th>' : ""}</tr>
+      <tr><th>Descrição</th><th>Qtd.</th>${showUnitColumn ? "<th>Unidade</th>" : ""}${hasAnyPrice ? '<th class="value">Valor</th>' : ""}</tr>
     </thead>
     <tbody>
       ${rows}

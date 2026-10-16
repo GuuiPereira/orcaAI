@@ -52,6 +52,13 @@ describe('buildInterpretationPrompt', () => {
     expect(system).toMatch(/não assuma 1 nem invente uma unidade/i);
   });
 
+  it('instructs the model that unit is a material-only measurement unit, never for services', () => {
+    const { system } = buildInterpretationPrompt('texto');
+    expect(system).toMatch(/unidade de medida/i);
+    expect(system).toMatch(/preencha só em itens do tipo "material"/i);
+    expect(system).toMatch(/"service".*unit.*sempre null|unit.*é sempre null.*"service"|sempre null/i);
+  });
+
   it('instructs the model that total_price_cents is always the total, not a per-unit price', () => {
     const { system } = buildInterpretationPrompt('texto qualquer');
     expect(system).toMatch(/total_price_cents.*sempre o valor total/i);

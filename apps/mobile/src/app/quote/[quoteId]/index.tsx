@@ -33,6 +33,7 @@ import {
 import { CustomerPickerModal } from '@/components/customer-picker-modal';
 import { PdfPreview } from '@/components/pdf-preview';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useQuoteEditorDraft } from '@/hooks/use-quote-editor-draft';
 import { createCustomer, getCustomer, updateCustomer, type Customer } from '@/lib/customers';
 import { goBackOr } from '@/lib/navigation';
 import { getCurrentOrganization, getCurrentOrganizationId, type CurrentOrganization } from '@/lib/organizations';
@@ -108,6 +109,17 @@ type EditableCommercialTerms = {
   validityDays: string;
 };
 
+// O que o rascunho local guarda enquanto o orçamento não é emitido (ver
+// use-quote-editor-draft.ts) - só o que é editável nesta tela e não tem
+// outro lugar que já salve sozinho (cliente vinculado já persiste direto no
+// banco a cada troca, por exemplo - não precisa entrar aqui).
+type QuoteEditorDraft = {
+  items: EditableItem[];
+  commercialTerms: EditableCommercialTerms;
+  discountKind: DiscountKind;
+  discountValue: string;
+};
+
 function itemFromResult(item: AiInterpretationResult['items'][number], key: string): EditableItem {
   return {
     key,
@@ -151,6 +163,8 @@ export default function QuoteEditorScreen() {
   const { quoteId } = useLocalSearchParams<{ quoteId: string }>();
   const keyCounter = useRef(0);
   const nextKey = () => `item-${keyCounter.current++}`;
+  const editorDraft = useQuoteEditorDraft<QuoteEditorDraft>(quoteId);
+  const hasLoadedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -219,6 +233,7 @@ export default function QuoteEditorScreen() {
     let cancelled = false;
 
     async function load() {
+      hasLoadedRef.current = false;
       setLoading(true);
       setErrorMessage(null);
       try {
@@ -349,12 +364,26 @@ export default function QuoteEditorScreen() {
             }));
           }
         }
+
+        // Por último: se existe edição não emitida salva neste aparelho,
+        // ela prevalece sobre o que acabou de ser carregado (quote_items ou
+        // a interpretação da IA) - é mais recente que os dois.
+        const draft = await editorDraft.loadDraft();
+        if (!cancelled && draft) {
+          setItems(draft.items.map((item) => ({ ...item, key: nextKey() })));
+          setCommercialTerms(draft.commercialTerms);
+          setDiscountKind(draft.discountKind);
+          setDiscountValue(draft.discountValue);
+        }
       } catch (error) {
         if (!cancelled) {
           setErrorMessage(error instanceof Error ? error.message : String(error));
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          hasLoadedRef.current = true;
+        }
       }
     }
 
@@ -364,6 +393,16 @@ export default function QuoteEditorScreen() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteId]);
+
+  // Salva a cada edição (com debounce) enquanto o orçamento não é emitido -
+  // ver use-quote-editor-draft.ts. Ignora a primeira execução (o load()
+  // acima ainda está preenchendo o estado inicial; salvar aí seria só
+  // reescrever o que já estava no banco/na IA como se fosse um rascunho).
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+    editorDraft.saveDraft({ items, commercialTerms, discountKind, discountValue });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, commercialTerms, discountKind, discountValue]);
 
   // RF-049: percentual fora de 0-100 (ou texto inválido) não vira desconto -
   // fica sem aplicar até o usuário corrigir, em vez de quebrar o cálculo.
@@ -632,6 +671,10 @@ export default function QuoteEditorScreen() {
         currentVersion: result.quote.current_version,
         issuedAt: result.quote.issued_at,
       });
+      // Emitiu de verdade: quote_items agora é a fonte de verdade (ver
+      // load() acima) - o rascunho local deste aparelho não é mais
+      // necessário.
+      editorDraft.clearDraft();
       // issue-quote grava "emitido"/"reemitido" em quote_events do lado do
       // servidor (RF-074) - busca de novo pra refletir na linha do tempo.
       listQuoteEvents(quoteId)
@@ -834,6 +877,11 @@ export default function QuoteEditorScreen() {
               Adicionar item
             </Button>
           </View>
+          {editorDraft.status !== 'idle' && (
+            <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+              {editorDraft.status === 'saving' ? 'Salvando alterações…' : 'Alterações salvas neste aparelho'}
+            </Text>
+          )}
 
           {items.map((item) => (
             <ItemCard key={item.key} item={item} onChange={updateItem} onRemove={removeItem} />
@@ -1074,7 +1122,13 @@ function ItemCard({
           <SegmentedButtons
             style={styles.itemTypeSegments}
             value={item.type}
-            onValueChange={(value) => onChange(item.key, { type: value as QuoteItemType })}
+            onValueChange={(value) => {
+              const type = value as QuoteItemType;
+              // Unidade só faz sentido pra material (decisão do usuário,
+              // 2026-10-15: "1 quarto" como unidade de um serviço não faz
+              // sentido) - sai do tipo, perde a unidade.
+              onChange(item.key, { type, unit: type === 'material' ? item.unit : '' });
+            }}
             buttons={ITEM_TYPE_SEGMENTS}
           />
           <IconButton icon="delete-outline" onPress={() => onRemove(item.key)} />
@@ -1100,9 +1154,11 @@ function ItemCard({
               keyboardType="numeric"
             />
           </View>
-          <View style={styles.itemNumberField}>
-            <QuoteField label="Unidade" value={item.unit} onChangeText={(unit) => onChange(item.key, { unit })} />
-          </View>
+          {item.type === 'material' && (
+            <View style={styles.itemNumberField}>
+              <QuoteField label="Unidade" value={item.unit} onChangeText={(unit) => onChange(item.key, { unit })} />
+            </View>
+          )}
         </View>
         <QuoteField
           label="Valor (R$)"

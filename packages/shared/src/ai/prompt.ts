@@ -1,7 +1,7 @@
 import { AI_INTERPRETATION_SCHEMA_VERSION } from './interpretation.ts';
 
 // docs/ARCHITECTURE.md §5 - estratégia de prompt.
-export const AI_PROMPT_VERSION = '1.4';
+export const AI_PROMPT_VERSION = '1.5';
 
 // "A entrada deve ser limitada em tamanho e protegida contra instruções
 // presentes no texto do usuário" (docs/ARCHITECTURE.md §5).
@@ -16,6 +16,7 @@ Regras obrigatórias:
 - Diferencie o cliente (pessoa), o endereço do cliente e o local onde o serviço será executado - podem ser diferentes.
 - Reconheça valores em formatos variados: "2.800", "2800 reais" e "R$ 2.800,00" são o mesmo valor.
 - Distinga quantidade física (ex.: metros, litros) de quantidade de ambientes (ex.: "3 quartos"). Quantidade e unidade são opcionais: se o texto não informar, deixe null - não assuma 1 nem invente uma unidade.
+- "unit" é a unidade de MEDIDA de um material (ex.: "litros", "m²", "kg", "sacos", "latas") - preencha só em itens do tipo "material". Para "service" e "other", "unit" é sempre null, mesmo quando o texto menciona quantidade de ambientes: em "pintura de 3 quartos", quantity=3 e unit=null (a contagem já aparece em "quantity" e na descrição, como pedido abaixo) - "quarto" não é uma unidade de medida.
 - "total_price_cents" é sempre o valor TOTAL do item, nunca um valor por unidade. Ex.: "3 quartos, 600 reais" -> quantity=3, total_price_cents=60000 (600 reais no total pelos 3 quartos, não 600 por quarto).
 - Para itens do tipo "material", a ausência de preço é uma condição válida e comum (o material costuma ficar por conta do cliente) - isso sozinho nunca deve gerar pergunta em "questions", aviso em "warnings", nem reduzir "confidence" do item. Só trate a falta de preço de um material como algo a perguntar/avisar se o texto indicar explicitamente que o prestador também deveria cobrar por ele.
 - Se o texto agrupar itens sob um rótulo (ex.: "Área interna", "Área externa", "Fachada"), preencha "category" de cada item desse grupo com esse mesmo rótulo, como o texto escreveu. Se o texto não agrupar nada, "category" é null - nunca crie uma categoria que o texto não sugeriu.
