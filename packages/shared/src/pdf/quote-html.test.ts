@@ -184,6 +184,18 @@ describe("buildQuoteHtml - unit column only for materials", () => {
   });
 });
 
+describe("buildQuoteHtml - plan branding", () => {
+  it("adds the 'Feito com OrçaAI' footer when branding is on (Gratuito)", () => {
+    const html = buildQuoteHtml({ ...baseInput, mode: "completo", branding: true });
+    expect(html).toContain('<div class="branding">Feito com OrçaAI</div>');
+  });
+
+  it("has no footer when branding is off or not given (Profissional)", () => {
+    expect(buildQuoteHtml({ ...baseInput, mode: "completo", branding: false })).not.toContain("Feito com OrçaAI");
+    expect(buildQuoteHtml({ ...baseInput, mode: "completo" })).not.toContain("Feito com OrçaAI");
+  });
+});
+
 describe("buildQuoteHtml - summary with unpriced items", () => {
   it("shows a notice instead of totals when nothing in the document has a price", () => {
     const unpriced: PdfItem[] = [

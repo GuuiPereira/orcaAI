@@ -5,20 +5,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Appbar,
+  Button,
   Card,
   Searchbar,
+  Snackbar,
   Text,
   useTheme as usePaperTheme,
 } from 'react-native-paper';
 
 import { OrganizationChips } from '@/components/admin-organization-chips';
+import { AdminPlanDialog } from '@/components/admin-plan-dialog';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import {
   formatDateTime,
   formatUsdFromCents,
+  getSignupPlan,
   isPlatformAdmin,
   listAdminOrganizations,
+  PLAN_LABELS,
+  setSignupPlan,
   type AdminOrganization,
+  type PlanCode,
 } from '@/lib/admin';
 import { goBackOr } from '@/lib/navigation';
 
@@ -32,6 +39,10 @@ export default function AdminOrganizationsScreen() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Fase 3 - planos: plano de quem se cadastrar daqui pra frente.
+  const [signupPlan, setSignupPlanState] = useState<{ plan: PlanCode; expiresAt: string | null } | null>(null);
+  const [signupDialogVisible, setSignupDialogVisible] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -43,8 +54,11 @@ export default function AdminOrganizationsScreen() {
           if (cancelled) return;
           setAllowed(admin);
           if (admin) {
-            const result = await listAdminOrganizations();
-            if (!cancelled) setOrganizations(result);
+            const [result, signup] = await Promise.all([listAdminOrganizations(), getSignupPlan()]);
+            if (!cancelled) {
+              setOrganizations(result);
+              setSignupPlanState(signup);
+            }
           }
         })
         .catch((error) => {
@@ -90,6 +104,23 @@ export default function AdminOrganizationsScreen() {
               {organizations.length} organização(ões). Só metadados - o conteúdo dos orçamentos nunca aparece aqui.
             </Text>
             {errorMessage && <Text style={{ color: paperTheme.colors.error }}>{errorMessage}</Text>}
+            {signupPlan && (
+              <Card mode="contained">
+                <Card.Content style={styles.signupRow}>
+                  <Text variant="bodyMedium" style={styles.flex}>
+                    Quem se cadastrar entra no <Text style={styles.bold}>{PLAN_LABELS[signupPlan.plan]}</Text>
+                    {signupPlan.plan === 'profissional'
+                      ? signupPlan.expiresAt
+                        ? ` (até ${new Date(signupPlan.expiresAt).toLocaleDateString('pt-BR')})`
+                        : ' (sem vencimento)'
+                      : ''}
+                  </Text>
+                  <Button compact onPress={() => setSignupDialogVisible(true)}>
+                    Alterar
+                  </Button>
+                </Card.Content>
+              </Card>
+            )}
             <FlatList
               data={filtered}
               keyExtractor={(org) => org.organization_id}
@@ -106,6 +137,11 @@ export default function AdminOrganizationsScreen() {
                       </Text>
                     </View>
                     <OrganizationChips org={org} />
+                    {org.monthly_issued_quotes !== null && (
+                      <Text variant="bodySmall">
+                        Emitidos no mês: {org.issued_this_month} de {org.monthly_issued_quotes}
+                      </Text>
+                    )}
                     <Text variant="bodySmall">
                       IA nas últimas 24h: {org.interpretations_24h}/{org.daily_interpretations_limit} interpretações ·{' '}
                       {org.extractions_24h}/{org.daily_extractions_limit} leituras
@@ -126,6 +162,23 @@ export default function AdminOrganizationsScreen() {
           </>
         )}
       </View>
+
+      <AdminPlanDialog
+        visible={signupDialogVisible}
+        title="Plano de quem se cadastrar"
+        description="Vale para organizações criadas daqui pra frente - quem já existe não muda. Profissional durante o teste fechado; Gratuito quando o teste acabar."
+        initialPlan={signupPlan?.plan ?? 'gratuito'}
+        onDismiss={() => setSignupDialogVisible(false)}
+        onSubmit={async (plan, expiresAt, reason) => {
+          await setSignupPlan(plan, expiresAt, reason);
+          setSignupPlanState(await getSignupPlan());
+          setSignupDialogVisible(false);
+          setNotice('Plano de cadastro atualizado.');
+        }}
+      />
+      <Snackbar visible={notice !== null} onDismiss={() => setNotice(null)} duration={3000}>
+        {notice}
+      </Snackbar>
     </View>
   );
 }
@@ -144,5 +197,7 @@ const styles = StyleSheet.create({
   cardContent: { gap: Spacing.one },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   flex: { flex: 1 },
+  bold: { fontWeight: 'bold' },
+  signupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   centered: { marginTop: Spacing.five, textAlign: 'center' },
 });

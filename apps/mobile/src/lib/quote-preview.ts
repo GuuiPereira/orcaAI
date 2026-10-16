@@ -24,8 +24,15 @@ const SAMPLE_ITEMS: PdfItem[] = [
   },
 ];
 
-export function buildProfilePreviewHtml(profile: OrganizationProfileInput, logoDataUri: string | null): string {
+// `branding`: no plano Gratuito a prévia mostra o mesmo rodapé do PDF de
+// verdade (Fase 3 - planos); o logo já chega null quando o plano não o inclui.
+export function buildProfilePreviewHtml(
+  profile: OrganizationProfileInput,
+  logoDataUri: string | null,
+  branding = false,
+): string {
   return buildQuoteHtml({
+    branding,
     mode: 'completo',
     organization: {
       tradeName: profile.tradeName.trim() || 'Seu nome comercial',

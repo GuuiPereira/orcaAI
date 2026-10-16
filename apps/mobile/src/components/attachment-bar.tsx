@@ -30,6 +30,11 @@ type Props = {
   attachments: Attachment[];
   disabled?: boolean;
   onAdd: (attachments: Attachment[]) => void;
+  // Fase 3 - planos: no Gratuito áudio/imagem não estão incluídos. Os botões
+  // ficam visíveis com cadeado e o toque explica o que o Profissional libera
+  // (o servidor recusa de qualquer jeito).
+  locked?: boolean;
+  onLockedPress?: () => void;
 };
 
 function formatClock(totalSeconds: number) {
@@ -40,7 +45,7 @@ function formatClock(totalSeconds: number) {
 
 // Fase 4A: gravar ou escolher imagem só ANEXA (lista abaixo, com ouvir/ver/
 // excluir). Nada é enviado aqui - a leitura acontece no "Continuar".
-export function AttachmentBar({ attachments, disabled, onAdd }: Props) {
+export function AttachmentBar({ attachments, disabled, onAdd, locked, onLockedPress }: Props) {
   const paperTheme = usePaperTheme();
   const recorder = useAudioRecorder(SPEECH_RECORDING);
   const recorderState = useAudioRecorderState(recorder);
@@ -169,6 +174,24 @@ export function AttachmentBar({ attachments, disabled, onAdd }: Props) {
         </Button>
         <Button mode="text" onPress={() => void cancelRecording()}>
           Cancelar
+        </Button>
+      </View>
+    );
+  }
+
+  if (locked) {
+    return (
+      <View style={styles.row}>
+        <Button mode="outlined" icon="lock-outline" onPress={onLockedPress} disabled={disabled}>
+          Falar
+        </Button>
+        {Platform.OS !== 'web' && (
+          <Button mode="outlined" icon="lock-outline" onPress={onLockedPress} disabled={disabled}>
+            Foto
+          </Button>
+        )}
+        <Button mode="outlined" icon="lock-outline" onPress={onLockedPress} disabled={disabled}>
+          Imagem
         </Button>
       </View>
     );

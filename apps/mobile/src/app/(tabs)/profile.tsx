@@ -18,6 +18,7 @@ import { notifyOrganizationChanged } from '@/hooks/use-auth-gate';
 import { BottomTabInset, Spacing, WebTopBarInset } from '@/constants/theme';
 import { requestAccountDeletion } from '@/lib/account-deletion';
 import { isPlatformAdmin } from '@/lib/admin';
+import { formatPlanDate, getMyEntitlements, PLAN_LIMIT_MESSAGE, UPGRADE_HINT, type Entitlements } from '@/lib/plan';
 import { signOut } from '@/lib/auth';
 import {
   getCurrentOrganizationId,
@@ -119,9 +120,15 @@ export default function ProfileScreen() {
   // banco recusa qualquer outro de qualquer jeito).
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // Fase 3 - planos: "Seu plano" e o que ele muda no PDF (logo, rodapé).
+  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+
   useEffect(() => {
     isPlatformAdmin().then(setIsAdmin).catch(() => setIsAdmin(false));
+    getMyEntitlements().then(setEntitlements).catch(() => setEntitlements(null));
   }, []);
+
+  const logoInPdf = entitlements?.company_logo_in_pdf ?? true;
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -164,8 +171,8 @@ export default function ProfileScreen() {
     if (!form) return;
     setLoadingPreview(true);
     try {
-      const logoDataUri = await getOrganizationLogoDataUri(logoPath);
-      setPreviewHtml(buildProfilePreviewHtml(toProfile(form), logoDataUri));
+      const logoDataUri = logoInPdf ? await getOrganizationLogoDataUri(logoPath) : null;
+      setPreviewHtml(buildProfilePreviewHtml(toProfile(form), logoDataUri, entitlements?.pdf_branding ?? false));
     } finally {
       setLoadingPreview(false);
     }
@@ -242,6 +249,8 @@ export default function ProfileScreen() {
           <Text style={{ color: paperTheme.colors.error }}>{loadError}</Text>
         ) : form && organizationId ? (
           <>
+            {entitlements && <PlanSection entitlements={entitlements} />}
+
             <View style={styles.logoRow}>
               {logoUrl ? (
                 <Image source={{ uri: logoUrl }} style={styles.logoImage} />
@@ -251,7 +260,11 @@ export default function ProfileScreen() {
               <View style={styles.logoTextColumn}>
                 <Text variant="bodyMedium">Logo</Text>
                 <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
-                  {logoPath ? 'Usado no orçamento em PDF.' : 'Sem logo ainda - usamos suas iniciais.'}
+                  {!logoInPdf
+                    ? 'No plano Gratuito o logo não aparece no PDF - ele já fica guardado para quando você assinar o Profissional.'
+                    : logoPath
+                      ? 'Usado no orçamento em PDF.'
+                      : 'Sem logo ainda - usamos suas iniciais.'}
                 </Text>
                 <Button mode="text" compact onPress={handlePickLogo} loading={uploadingLogo} disabled={uploadingLogo}>
                   {logoPath ? 'Trocar logo' : 'Escolher logo'}
@@ -443,6 +456,43 @@ export default function ProfileScreen() {
   );
 }
 
+// Fase 3 - planos: qual o plano, até quando, e quanto do Gratuito já foi usado.
+function PlanSection({ entitlements }: { entitlements: Entitlements }) {
+  const paperTheme = usePaperTheme();
+  const isFree = entitlements.plan_code === 'gratuito';
+  const limit = entitlements.monthly_issued_quotes;
+  const reachedLimit = limit !== null && entitlements.issued_this_month >= limit;
+  return (
+    <Section title="Seu plano">
+      <Text variant="bodyLarge">
+        {entitlements.plan_name}
+        {entitlements.expires_at
+          ? ` · até ${formatPlanDate(entitlements.expires_at)}`
+          : isFree
+            ? ''
+            : ' · sem vencimento'}
+      </Text>
+      {entitlements.expired_plan_code && entitlements.expired_at && (
+        <Text variant="bodySmall" style={{ color: paperTheme.colors.error }}>
+          Seu plano Profissional venceu em {formatPlanDate(entitlements.expired_at)}.
+        </Text>
+      )}
+      {limit !== null && (
+        <Text variant="bodyMedium">
+          {entitlements.issued_this_month} de {limit} orçamentos emitidos neste mês.
+        </Text>
+      )}
+      {isFree && (
+        <Text variant="bodySmall" style={{ color: paperTheme.colors.onSurfaceVariant }}>
+          {reachedLimit
+            ? PLAN_LIMIT_MESSAGE
+            : `No Profissional: orçamentos sem limite, logo no PDF, PDF sem a marca do OrçaAI e entrada por áudio ou imagem. ${UPGRADE_HINT}`}
+        </Text>
+      )}
+    </Section>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
@@ -478,7 +528,11 @@ const styles = StyleSheet.create({
     borderRadius: 32,
   },
   logoTextColumn: {
+    // Ocupa o resto da linha e quebra o texto (o aviso do plano Gratuito é
+    // longo e saía da tela).
+    flex: 1,
     gap: 2,
+    alignItems: 'flex-start',
   },
   section: {
     gap: Spacing.two,

@@ -56,6 +56,9 @@ export type BuildQuoteHtmlInput = {
   issuedAt: Date;
   // Aviso extra exibido no topo (ex.: "EXEMPLO" na prévia do perfil).
   notice?: string | null;
+  // Fase 3 - planos: no Gratuito o PDF leva um rodapé discreto "Feito com
+  // OrçaAI" (o Profissional sai sem). Ausente = sem rodapé.
+  branding?: boolean;
 };
 
 const MODE_NOTICE: Record<PdfMode, string | null> = {
@@ -218,6 +221,7 @@ export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
   th { font-size: 11px; text-transform: uppercase; color: #555; }
   td.value, th.value { text-align: right; }
   .total-row td { font-weight: bold; font-size: 15px; border-top: 2px solid #111; border-bottom: none; }
+  .branding { margin-top: 32px; text-align: center; font-size: 10px; color: #999; }
 </style>
 </head>
 <body>
@@ -254,6 +258,7 @@ export function buildQuoteHtml(input: BuildQuoteHtmlInput): string {
   ${summarySectionHtml}
 
   ${commercialTermsSection}
+  ${input.branding ? `<div class="branding">Feito com OrçaAI</div>` : ""}
 </body>
 </html>`;
 }

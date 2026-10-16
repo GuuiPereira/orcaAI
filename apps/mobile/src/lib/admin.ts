@@ -27,7 +27,19 @@ export type AdminOrganization = {
   limits_overridden: boolean;
   interpretations_24h: number;
   extractions_24h: number;
+  // Fase 3 - planos
+  plan_code: 'gratuito' | 'profissional';
+  plan_name: string;
+  plan_expires_at: string | null;
+  expired_plan_code: string | null;
+  expired_at: string | null;
+  monthly_issued_quotes: number | null;
+  issued_this_month: number;
 };
+
+export type PlanCode = 'gratuito' | 'profissional';
+
+export const PLAN_LABELS: Record<PlanCode, string> = { gratuito: 'Gratuito', profissional: 'Profissional' };
 
 export type AdminOrganizationDetail = {
   organization: AdminOrganization;
@@ -56,6 +68,8 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   suspend: 'Suspensa',
   reactivate: 'Reativada',
   unstick_interpretation: 'Interpretação destravada',
+  set_plan: 'Plano alterado',
+  set_signup_plan: 'Plano de cadastro alterado',
 };
 
 // Os erros das funções do painel vêm com status próprio (PTxxx no banco).
@@ -64,9 +78,10 @@ function adminErrorMessage(error: { code?: string; message?: string } | null): s
     case '42501':
       return 'Acesso restrito a administradores.';
     case 'PT400':
-      return error.message?.startsWith('reason')
-        ? 'Escreva um motivo (de 3 a 500 caracteres).'
-        : 'Os limites precisam ser números maiores que zero (ou vazio para usar o padrão).';
+      if (error.message?.startsWith('reason')) return 'Escreva um motivo (de 3 a 500 caracteres).';
+      if (error.message?.startsWith('expires_at')) return 'A validade precisa ser uma data futura.';
+      if (error.message?.startsWith('unknown plan')) return 'Plano desconhecido.';
+      return 'Os limites precisam ser números maiores que zero (ou vazio para usar o padrão).';
     case 'PT404':
       return 'Organização não encontrada.';
     case 'PT409':
@@ -122,6 +137,45 @@ export function reactivateOrganization(organizationId: string, reason: string): 
 
 export function unstickInterpretations(organizationId: string, reason: string): Promise<number> {
   return call<number>('admin_unstick_interpretations', { target_organization_id: organizationId, reason });
+}
+
+// Fase 3 - planos (cobrança manual): o admin define o plano da organização.
+// `expiresAt` null = sem vencimento. Gratuito apaga a assinatura.
+export function setOrganizationPlan(
+  organizationId: string,
+  plan: PlanCode,
+  expiresAt: string | null,
+  reason: string,
+): Promise<void> {
+  return call('admin_set_plan', {
+    target_organization_id: organizationId,
+    plan_code: plan,
+    expires_at: plan === 'gratuito' ? null : expiresAt,
+    reason,
+  });
+}
+
+// Plano de quem se cadastrar daqui pra frente (Profissional durante o teste
+// fechado, Gratuito depois). Não mexe em quem já existe.
+export async function getSignupPlan(): Promise<{ plan: PlanCode; expiresAt: string | null }> {
+  const rows = await call<{ signup_plan_code: PlanCode; signup_plan_expires_at: string | null }[]>('admin_get_signup_plan');
+  return { plan: rows[0].signup_plan_code, expiresAt: rows[0].signup_plan_expires_at };
+}
+
+export function setSignupPlan(plan: PlanCode, expiresAt: string | null, reason: string): Promise<void> {
+  return call('admin_set_signup_plan', { plan_code: plan, expires_at: plan === 'gratuito' ? null : expiresAt, reason });
+}
+
+// "Validade em dias" do formulário -> data ISO (fim do dia N, no aparelho).
+export function expiresAtFromDays(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  date.setHours(23, 59, 59, 0);
+  return date.toISOString();
+}
+
+export function daysUntil(iso: string): number {
+  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
 }
 
 export function formatUsdFromCents(cents: number): string {

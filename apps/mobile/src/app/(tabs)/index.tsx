@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, Chip, Text, TextInput, useTheme as usePaperTheme } from 'react-native-paper';
@@ -13,6 +13,7 @@ import { BottomTabInset, MaxContentWidth, Spacing, WebTopBarInset } from '@/cons
 import { useQuoteDraft } from '@/hooks/use-quote-draft';
 import type { Customer } from '@/lib/customers';
 import { ExtractionUserError, readAttachments, type Attachment, type ExtractionKind } from '@/lib/input-extraction';
+import { getMyEntitlements, PLAN_FEATURE_MESSAGE } from '@/lib/plan';
 import { createQuoteWithText, interpretQuote } from '@/lib/quotes';
 import { reportError } from '@/lib/monitoring';
 
@@ -45,6 +46,24 @@ export default function NewQuoteScreen() {
   // (RF-027) - enquanto houver uma leitura não confirmada, "Continuar" fica
   // travado.
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // Fase 3 - planos: áudio/imagem são do Profissional. Relido ao voltar pra
+  // tela (o admin pode ter mudado o plano). Na dúvida, não trava.
+  const [inputLocked, setInputLocked] = useState(false);
+  const [showPlanHint, setShowPlanHint] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getMyEntitlements()
+        .then((entitlements) => {
+          if (!cancelled) setInputLocked(!entitlements.audio_image_input);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
   const [isReading, setIsReading] = useState(false);
   const [review, setReview] = useState<{
     kinds: ExtractionKind[];
@@ -153,7 +172,19 @@ export default function NewQuoteScreen() {
             attachments={attachments}
             disabled={busy}
             onAdd={(added) => setAttachments((current) => [...current, ...added])}
+            locked={inputLocked}
+            onLockedPress={() => setShowPlanHint(true)}
           />
+          {inputLocked && showPlanHint && (
+            <Card mode="outlined">
+              <Card.Content style={styles.reviewContent}>
+                <Text variant="bodyMedium">{PLAN_FEATURE_MESSAGE}</Text>
+                <Button mode="text" onPress={() => setShowPlanHint(false)}>
+                  Entendi
+                </Button>
+              </Card.Content>
+            </Card>
+          )}
           <AttachmentList
             attachments={attachments}
             disabled={busy}

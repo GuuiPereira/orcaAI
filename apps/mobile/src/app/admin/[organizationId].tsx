@@ -18,6 +18,7 @@ import {
 } from 'react-native-paper';
 
 import { OrganizationChips } from '@/components/admin-organization-chips';
+import { AdminPlanDialog } from '@/components/admin-plan-dialog';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import {
   ADMIN_ACTION_LABELS,
@@ -28,6 +29,7 @@ import {
   getAdminOrganizationDetail,
   reactivateOrganization,
   setOrganizationLimits,
+  setOrganizationPlan,
   suspendOrganization,
   unstickInterpretations,
   type AdminOrganizationDetail,
@@ -84,6 +86,7 @@ export default function AdminOrganizationScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [planDialogVisible, setPlanDialogVisible] = useState(false);
 
   // O estado só muda na resposta (nunca de forma síncrona dentro do efeito).
   const load = useCallback(
@@ -198,6 +201,29 @@ export default function AdminOrganizationScreen() {
 
           <Card mode="outlined">
             <Card.Content style={styles.cardContent}>
+              <Text variant="titleMedium">Plano</Text>
+              <Text variant="bodyMedium">
+                {org.plan_name}
+                {org.plan_expires_at
+                  ? ` · até ${formatDateTime(org.plan_expires_at)}`
+                  : org.plan_code === 'profissional'
+                    ? ' · sem vencimento'
+                    : ''}
+              </Text>
+              {org.expired_plan_code && org.expired_at && (
+                <Text variant="bodySmall" style={{ color: paperTheme.colors.error }}>
+                  O Profissional venceu em {formatDateTime(org.expired_at)} - voltou ao Gratuito.
+                </Text>
+              )}
+              <Text variant="bodyMedium">
+                Emitidos neste mês: {org.issued_this_month}
+                {org.monthly_issued_quotes !== null ? ` de ${org.monthly_issued_quotes}` : ' (sem limite)'}
+              </Text>
+            </Card.Content>
+          </Card>
+
+          <Card mode="outlined">
+            <Card.Content style={styles.cardContent}>
               <Text variant="titleMedium">IA nas últimas 24h</Text>
               <Text variant="bodyMedium">
                 Interpretações: {org.interpretations_24h} de {org.daily_interpretations_limit}
@@ -216,6 +242,9 @@ export default function AdminOrganizationScreen() {
           <Card mode="outlined">
             <Card.Content style={styles.cardContent}>
               <Text variant="titleMedium">Ações</Text>
+              <Button mode="contained-tonal" icon="card-account-details-star-outline" onPress={() => setPlanDialogVisible(true)}>
+                Definir plano
+              </Button>
               <Button mode="outlined" icon="speedometer" onPress={() => openDialog('limits')}>
                 Ajustar limite de IA
               </Button>
@@ -367,6 +396,21 @@ export default function AdminOrganizationScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      <AdminPlanDialog
+        visible={planDialogVisible}
+        title="Definir plano"
+        description="Cobrança manual: ative o Profissional depois de receber (Pix ou link). Sem validade = não vence; vencido, volta sozinho ao Gratuito."
+        initialPlan={org?.plan_code ?? 'gratuito'}
+        onDismiss={() => setPlanDialogVisible(false)}
+        onSubmit={async (plan, expiresAt, why) => {
+          if (!organizationId) return;
+          await setOrganizationPlan(organizationId, plan, expiresAt, why);
+          setPlanDialogVisible(false);
+          setNotice('Plano atualizado.');
+          await load();
+        }}
+      />
 
       <Snackbar visible={notice !== null} onDismiss={() => setNotice(null)} duration={3000}>
         {notice}

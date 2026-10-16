@@ -36,6 +36,7 @@ import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useQuoteEditorDraft } from '@/hooks/use-quote-editor-draft';
 import { createCustomer, getCustomer, updateCustomer, type Customer } from '@/lib/customers';
 import { goBackOr } from '@/lib/navigation';
+import { getMyEntitlements, PERMISSIVE_ENTITLEMENTS, type Entitlements } from '@/lib/plan';
 import { getCurrentOrganization, getCurrentOrganizationId, type CurrentOrganization } from '@/lib/organizations';
 import { shareQuotePdf } from '@/lib/pdf-share';
 import { getOrganizationLogoDataUri } from '@/lib/storage';
@@ -188,6 +189,10 @@ export default function QuoteEditorScreen() {
   const [discountValue, setDiscountValue] = useState('');
   const [organization, setOrganization] = useState<CurrentOrganization | null>(null);
   const [logoDataUri, setLogoDataUri] = useState<string | null>(null);
+  // Fase 3 - planos: no Gratuito o PDF sai com o rodapé "Feito com OrçaAI" e
+  // sem o logo. Enquanto não carrega (ou se falhar), usa o permissivo - o
+  // limite que importa (emissão) é aplicado no servidor.
+  const [entitlements, setEntitlements] = useState<Entitlements>(PERMISSIVE_ENTITLEMENTS);
   const [pdfMode, setPdfMode] = useState<PdfGenerationMode>('completo');
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewFileName, setPreviewFileName] = useState('orcamento');
@@ -251,6 +256,11 @@ export default function QuoteEditorScreen() {
         getOrganizationLogoDataUri(organization?.logoPath ?? null)
           .then((uri) => {
             if (!cancelled) setLogoDataUri(uri);
+          })
+          .catch(() => {});
+        getMyEntitlements()
+          .then((result) => {
+            if (!cancelled) setEntitlements(result);
           })
           .catch(() => {});
         const commercialDefaults = {
@@ -587,7 +597,8 @@ export default function QuoteEditorScreen() {
     if (!organization) return null;
     return buildQuoteHtml({
       mode,
-      organization: { ...organization, logoDataUri },
+      organization: { ...organization, logoDataUri: entitlements.company_logo_in_pdf ? logoDataUri : null },
+      branding: entitlements.pdf_branding,
       customer: {
         name: linkedCustomer?.name ?? null,
         phone: linkedCustomer?.phone ?? null,

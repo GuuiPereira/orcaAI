@@ -3,6 +3,7 @@ import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 
 import { appendFilePart } from './form-file';
+import { PLAN_FEATURE_MESSAGE } from './plan';
 import { supabase } from './supabase';
 
 // Fase 4A: áudio e imagem só produzem TEXTO (a function `extract-input`
@@ -41,6 +42,7 @@ async function errorFromResponse(error: unknown, kind: ExtractionKind): Promise<
           'Você chegou ao limite de leituras das últimas 24 horas. Digite o texto ou tente de novo mais tarde.',
         );
       }
+      if (body.code === 'plan_feature') return new ExtractionUserError(PLAN_FEATURE_MESSAGE);
       if (body.code === 'organization_suspended') {
         return new ExtractionUserError('Sua conta está suspensa. Fale com o suporte do OrçaAI.');
       }
