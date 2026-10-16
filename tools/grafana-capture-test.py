@@ -1,6 +1,6 @@
-"""Teste da captura da Fase 5 (Grafana) contra a stack LOCAL: user_id e
-latency_ms em ai_interpretations, ai_quality_metrics na emissão e o evento
-"compartilhado" em quote_events.
+"""Teste da captura e das views da Fase 5 (Grafana) contra a stack LOCAL:
+user_id e latency_ms em ai_interpretations, ai_quality_metrics na emissão, o
+evento "compartilhado" em quote_events, e as views metrics_*.
 
 Uso: python3 tools/grafana-capture-test.py
 Sobe com: supabase functions serve --env-file supabase/functions/interpret-quote/.env.local
@@ -91,6 +91,30 @@ ok("ai_quality_metrics sem policy pra usuário comum", d in ([], None) or st in 
 
 cols = psql("select string_agg(column_name, ',') from information_schema.columns where table_name='ai_quality_metrics'")
 ok("ai_quality_metrics não tem coluna de conteúdo", not any(w in cols for w in ("text","description","category")) , cols)
+
+# --- views do passo 2 (metrics_*): existem, têm dados coerentes e NINGUÉM
+# comum as lê pela API (só service_role, mesma regra das views do Task 8)
+for view in [
+    "metrics_ai_latency_daily",
+    "metrics_usage_daily",
+    "metrics_cost_monthly",
+    "metrics_time_to_share_daily",
+    "metrics_ai_quality_by_prompt",
+]:
+    st, d = http("GET", f"/rest/v1/{view}?select=*&limit=1", A["token"])
+    ok(f"view {view} não é legível por usuário comum", st in (401, 403), f"{st} {d}")
+
+latency = psql(f"select p50_ms from metrics_ai_latency_daily where day = current_date")
+ok("metrics_ai_latency_daily tem latência medida hoje", latency != "" and float(latency) > 0, latency)
+
+usage_row = psql(f"select interpretations, quotes_issued from metrics_usage_daily where organization_id='{A['org']}'")
+ok("metrics_usage_daily reflete a interpretação e a emissão de A", usage_row == "1|1", usage_row)
+
+quality_row = psql("select pct_fully_accepted from metrics_ai_quality_by_prompt where prompt_version='1.5'")
+ok("metrics_ai_quality_by_prompt tem a versão de prompt usada", quality_row != "", quality_row)
+
+share_step = psql("select count(*) from metrics_funnel_daily where step='compartilhado' and day=current_date")
+ok("funil (metrics_funnel_daily) inclui o passo 'compartilhado'", int(share_step) >= 1, share_step)
 
 print()
 print("RESULTADO:", "TUDO OK" if ok.failed == 0 else f"{ok.failed} FALHA(S)")
