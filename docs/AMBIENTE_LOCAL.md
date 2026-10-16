@@ -815,7 +815,7 @@ insert into quote_events (quote_id, event_type, actor_user_id)
 "
 ```
 
-### Captura pro Grafana - passo 1 (Fase 5)
+### Grafana - captura, views e papel de leitura (Fase 5, passos 1-3)
 
 `.tasks/fase-5-grafana.md`. Sem tela ainda - só o que fica gravado:
 
@@ -843,6 +843,42 @@ Cobre `user_id`/`latency_ms` gravados, `ai_quality_metrics` com as contagens
 certas (editei um item, adicionei outro, um ficou igual), `compartilhado`
 aceito só de membro da organização dona do orçamento, outros tipos de evento
 continuam recusados, e nenhuma das tabelas novas é lida pela API pública.
+
+**Passo 2 - views** (migração `20261016022810`): `metrics_ai_latency_daily`,
+`metrics_usage_daily` (por organização: id curto + `trade_name`),
+`metrics_cost_monthly` (interpretação + áudio/imagem), `metrics_time_to_share_daily`
+e `metrics_ai_quality_by_prompt`; o funil ganhou o passo `compartilhado`.
+Todas só pra `service_role` (e pro `grafana_reader`, abaixo).
+
+**Passo 3 - papel `grafana_reader`** (migração `20261016023440`): `SELECT`
+só nas 9 views `metrics_*`, nada nas tabelas base, `noinherit`, sem criar
+nada. **A migração cria o papel sem senha** (não autentica até alguém
+definir uma) - a senha nunca entra no repositório. Definir/trocar:
+
+```bash
+# local (a stack local some no db reset - senha descartável):
+docker exec supabase_db_orcaai psql -U postgres -d postgres -c "alter role grafana_reader with password '<senha>';"
+
+# hospedado (guarde a senha só no data source do Grafana / no .env.local da raiz):
+pnpm exec supabase db query --linked "alter role grafana_reader with password '<senha>';"
+```
+
+Trocar a senha é rodar o mesmo comando de novo e atualizar o data source do
+Grafana - nada mais precisa de redeploy.
+
+**Conexão do Grafana (hospedado):** use o **Session pooler** (a doc do
+Supabase recomenda pra ferramenta de BI: aceita prepared statements e é
+IPv4 em todos os planos - a conexão direta `db.<ref>.supabase.co` é só IPv6
+sem o add-on pago). Host: copie do painel (Project Settings > Database >
+Connection string > Session pooler - o host **não** dá pra deduzir só da
+região); porta `5432`; usuário `grafana_reader.rqdrwcrbcdrdxzfwtiwv` (papel
+customizado no pooler = `<papel>.<ref>`); banco `postgres`; SSL `require`.
+
+O `tools/grafana-capture-test.py` também cobre o passo 3: gera uma senha só
+pro teste (nunca impressa), conecta como `grafana_reader` e confere que ele
+lê as 9 views e recebe "permission denied" em `quotes`, `customers`,
+`ai_interpretations`, `quote_events`, `organizations` e `profiles`, e que não
+consegue criar tabela.
 
 ### Testando a `interpret-quote` localmente
 

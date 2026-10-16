@@ -6,7 +6,7 @@ Uso: python3 tools/grafana-capture-test.py
 Sobe com: supabase functions serve --env-file supabase/functions/interpret-quote/.env.local
 (gasta centavos de dólar de OpenAI, uma interpretação).
 """
-import json, subprocess, sys, time, urllib.request, urllib.error
+import json, secrets, subprocess, sys, time, urllib.request, urllib.error
 
 BASE = "http://127.0.0.1:54321"
 ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
@@ -115,6 +115,37 @@ ok("metrics_ai_quality_by_prompt tem a versão de prompt usada", quality_row != 
 
 share_step = psql("select count(*) from metrics_funnel_daily where step='compartilhado' and day=current_date")
 ok("funil (metrics_funnel_daily) inclui o passo 'compartilhado'", int(share_step) >= 1, share_step)
+
+# --- passo 3: papel grafana_reader (SELECT só nas views, nada nas tabelas
+# base). Senha gerada só pra este teste, nunca impressa.
+grafana_password = secrets.token_urlsafe(24)
+subprocess.run(
+    ["docker", "exec", "supabase_db_orcaai", "psql", "-U", "postgres", "-d", "postgres", "-c",
+     f"alter role grafana_reader with password '{grafana_password}';"],
+    capture_output=True, text=True,
+)
+
+def psql_as_grafana(sql):
+    return subprocess.run(
+        ["docker", "exec", "-e", f"PGPASSWORD={grafana_password}", "supabase_db_orcaai",
+         "psql", "-h", "127.0.0.1", "-U", "grafana_reader", "-d", "postgres", "-Atc", sql],
+        capture_output=True, text=True,
+    )
+
+views = [
+    "metrics_ai_daily", "metrics_funnel_daily", "metrics_pdf_coverage", "metrics_extractions_daily",
+    "metrics_ai_latency_daily", "metrics_usage_daily", "metrics_cost_monthly",
+    "metrics_time_to_share_daily", "metrics_ai_quality_by_prompt",
+]
+view_failures = [v for v in views if psql_as_grafana(f"select 1 from {v} limit 1").returncode != 0]
+ok("grafana_reader lê as 9 views de métrica", view_failures == [], str(view_failures))
+
+for table in ["quotes", "customers", "ai_interpretations", "quote_events", "organizations", "profiles"]:
+    result = psql_as_grafana(f"select 1 from {table} limit 1")
+    ok(f"grafana_reader NÃO lê a tabela base '{table}'", result.returncode != 0 and "permission denied" in result.stderr, result.stderr.strip())
+
+create_result = psql_as_grafana("create table hack(id int);")
+ok("grafana_reader não consegue criar tabela (nocreatedb/nocreaterole)", create_result.returncode != 0, create_result.stderr.strip())
 
 print()
 print("RESULTADO:", "TUDO OK" if ok.failed == 0 else f"{ok.failed} FALHA(S)")
