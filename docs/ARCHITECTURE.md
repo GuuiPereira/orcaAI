@@ -319,6 +319,13 @@ Medir:
 Sentry deve receber IDs técnicos e contexto sanitizado. Analytics não deve
 receber nomes, telefones, endereços, texto original ou conteúdo dos itens.
 
+Implementado (Fase 5, `.tasks/fase-5-grafana.md`): as métricas vivem no
+próprio Postgres, em views `metrics_*` (só contagens, somas, tempos e ids),
+e o painel de operação é um Grafana Cloud que lê essas views por um papel
+de leitura dedicado (`grafana_reader`), nunca pela `service_role`. Erros
+continuam no Sentry e o alerta de custo diário no `check-ai-cost`. Como
+operar: `docs/AMBIENTE_LOCAL.md`, "Painel de operação no Grafana".
+
 ## 12. Testes
 
 ### Unidade

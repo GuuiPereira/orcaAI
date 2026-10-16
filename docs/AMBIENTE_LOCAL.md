@@ -815,84 +815,92 @@ insert into quote_events (quote_id, event_type, actor_user_id)
 "
 ```
 
-### Grafana - captura, views e papel de leitura (Fase 5, passos 1-3)
+### Painel de operação no Grafana (Fase 5)
 
-`.tasks/fase-5-grafana.md`. Sem tela ainda - só o que fica gravado:
+`.tasks/fase-5-grafana.md`. **Grafana Cloud (plano gratuito)** lendo o
+próprio Postgres do Supabase hospedado ao vivo, por um papel que só enxerga
+views de métricas - nada de dado é copiado pro Grafana. Abrir:
+`https://<sua-stack>.grafana.net` → Dashboards → **OrçaAI - Operação**.
 
-- `ai_interpretations` ganhou `user_id` (quem chamou, do JWT) e `latency_ms`
-  (medido só em volta da chamada à OpenAI, dentro de `interpret-quote`).
-  Linhas de antes da migração `20261016015445` ficam `null` nos dois.
-- `compartilhado` entrou na allowlist de `quote_events_insert_member` (ver
-  seção "Histórico, busca e estados comerciais" acima) - o editor dispara
-  isso ao compartilhar o PDF (`lib/quotes.ts#logQuoteShared`), é a north
-  star do PRD §11 ("tempo até compartilhar").
-- Nova tabela `ai_quality_metrics`: uma linha por emissão que tinha uma
-  interpretação concluída pra comparar, só contagens (`estimated_cost_cents`
-  nunca entra aqui - é custo, não qualidade). `issue-quote` compara os itens
-  da IA com o que foi emitido **por posição** (sem id estável por item) -
-  serve pra tendência em dashboard, não pra auditar um orçamento específico.
+**O que alimenta o painel** (só contagens, somas, tempos e ids - RNF-008):
 
-Testar (`tools/grafana-capture-test.py`, gasta centavos de uma interpretação):
+| Peça | O que é |
+| --- | --- |
+| `ai_interpretations.user_id` / `latency_ms` | quem chamou a IA e quanto durou só a chamada à OpenAI (migração `20261016015445`; linhas mais antigas ficam `null`) |
+| `ai_interpretations.estimated_cost_cents` | agora `numeric`, custo exato (migração `20261016031829`). Era inteiro e ~0,07 ¢ por interpretação arredondava pra 0 - linhas antigas continuam 0 |
+| evento `compartilhado` em `quote_events` | o app grava ao compartilhar o PDF (`lib/quotes.ts#logQuoteShared`) - base do "tempo até compartilhar", a north star do PRD §11 |
+| `ai_quality_metrics` | gravada por `issue-quote`: quantos itens/campos o usuário mudou em relação à IA. Comparação **por posição** (não há id estável por item) - serve pra tendência, não pra auditar um orçamento |
+| 9 views `metrics_*` | `ai_daily`, `funnel_daily`, `pdf_coverage`, `extractions_daily`, `ai_latency_daily`, `usage_daily` (por organização: id curto + `trade_name`), `cost_monthly`, `time_to_share_daily`, `ai_quality_by_prompt` - só `service_role` e `grafana_reader` leem |
+| papel `grafana_reader` | `SELECT` só nas 9 views, `noinherit`, não cria nada (migração `20261016023440`) |
+| `ops/grafana/orcaai-operacao.json` | o dashboard versionado - **a fonte da verdade é o arquivo**, não a interface |
+
+**Senha do `grafana_reader`:** a migração cria o papel **sem senha** (não
+autentica até alguém definir), então ela nunca entra no git. No hospedado
+ela fica só em `GRAFANA_READER_PASSWORD` no `.env.local` da raiz e no data
+source do Grafana. Definir ou trocar (trocar = mesmo comando + atualizar o
+data source; nada mais precisa de redeploy):
+
+```bash
+# hospedado
+set -a; . ./.env.local; set +a
+pnpm exec supabase db query --linked "alter role grafana_reader with password '$GRAFANA_READER_PASSWORD';"
+
+# local (some no db reset - senha descartável)
+docker exec supabase_db_orcaai psql -U postgres -d postgres -c "alter role grafana_reader with password '<senha>';"
+```
+
+**Montar do zero** (se precisar recriar a stack ou mudar de conta):
+
+1. Criar a conta/stack em grafana.com; pular as telas que oferecem instalar
+   agentes e integrações.
+2. Pegar o host do **Session pooler** no Supabase: botão **Connect** → aba
+   **Direct** → **Session pooler**. Hoje: `aws-0-sa-east-1.pooler.supabase.com`
+   (não dá pra deduzir só da região). Session pooler porque a doc do Supabase
+   o recomenda pra BI (aceita prepared statements, IPv4 em todos os planos);
+   a conexão direta `db.<ref>.supabase.co` é só IPv6 sem o add-on pago.
+3. No Grafana: **Connections → Data sources → Add data source →
+   PostgreSQL**. **Pegadinha:** buscar "PostgreSQL" em "Add new connection"
+   abre a *integração* PostgreSQL (pede pra instalar o agente Grafana Alloy)
+   - não é isso. Campos: Name `OrçaAI (Supabase)`, Host URL
+   `aws-0-sa-east-1.pooler.supabase.com:5432`, Database `postgres`, Username
+   `grafana_reader.rqdrwcrbcdrdxzfwtiwv` (papel customizado no pooler =
+   `<papel>.<ref>`), Password = `GRAFANA_READER_PASSWORD`, TLS/SSL Mode
+   `require` → **Save & test** deve dizer "Database Connection OK".
+4. **Dashboards → New → Import → Upload dashboard JSON file** →
+   `ops/grafana/orcaai-operacao.json` → escolher o data source → Import. O
+   JSON usa o placeholder `${DS_ORCAAI}`, não carrega id de ninguém.
+
+**Mudou um painel na interface?** Share → Export → "Export for sharing
+externally" e sobrescreva `ops/grafana/orcaai-operacao.json`.
+
+**Criou uma view `metrics_*` nova?** Ela precisa de `grant select ... to
+grafana_reader` na mesma migração (senão o painel dá "permission denied"),
+e de entrar na lista de views do `tools/grafana-capture-test.py`. Se uma
+migração **recriar** uma view (`drop` + `create`, como a `20261016031829`),
+os grants somem junto - refaça-os.
+
+**Painel vazio ou zerado é normal** quando: o dado é anterior à Fase 5
+(latência, quem chamou, qualidade); o custo é de interpretações antigas (0
+arredondado); ninguém compartilhou um PDF desde o app com o evento
+(`eas update` de 2026-10-16).
+
+**Testar tudo localmente** (`tools/grafana-capture-test.py`, gasta centavos
+de uma interpretação):
 
 ```bash
 pnpm exec supabase functions serve --env-file supabase/functions/interpret-quote/.env.local
 python3 tools/grafana-capture-test.py
 ```
 
-Cobre `user_id`/`latency_ms` gravados, `ai_quality_metrics` com as contagens
-certas (editei um item, adicionei outro, um ficou igual), `compartilhado`
-aceito só de membro da organização dona do orçamento, outros tipos de evento
-continuam recusados, e nenhuma das tabelas novas é lida pela API pública.
-
-**Passo 2 - views** (migração `20261016022810`): `metrics_ai_latency_daily`,
-`metrics_usage_daily` (por organização: id curto + `trade_name`),
-`metrics_cost_monthly` (interpretação + áudio/imagem), `metrics_time_to_share_daily`
-e `metrics_ai_quality_by_prompt`; o funil ganhou o passo `compartilhado`.
-Todas só pra `service_role` (e pro `grafana_reader`, abaixo).
-
-**Passo 3 - papel `grafana_reader`** (migração `20261016023440`): `SELECT`
-só nas 9 views `metrics_*`, nada nas tabelas base, `noinherit`, sem criar
-nada. **A migração cria o papel sem senha** (não autentica até alguém
-definir uma) - a senha nunca entra no repositório. Definir/trocar:
-
-```bash
-# local (a stack local some no db reset - senha descartável):
-docker exec supabase_db_orcaai psql -U postgres -d postgres -c "alter role grafana_reader with password '<senha>';"
-
-# hospedado (guarde a senha só no data source do Grafana / no .env.local da raiz):
-pnpm exec supabase db query --linked "alter role grafana_reader with password '<senha>';"
-```
-
-Trocar a senha é rodar o mesmo comando de novo e atualizar o data source do
-Grafana - nada mais precisa de redeploy.
-
-**Conexão do Grafana (hospedado):** use o **Session pooler** (a doc do
-Supabase recomenda pra ferramenta de BI: aceita prepared statements e é
-IPv4 em todos os planos - a conexão direta `db.<ref>.supabase.co` é só IPv6
-sem o add-on pago). Host: `aws-0-sa-east-1.pooler.supabase.com` (copiado do painel: botão
-**Connect** → aba **Direct** → **Session pooler** - o host **não** dá pra
-deduzir só da região); porta `5432`; usuário `grafana_reader.rqdrwcrbcdrdxzfwtiwv` (papel
-customizado no pooler = `<papel>.<ref>`); banco `postgres`; SSL `require`.
-
-**Passo 4 - dashboard** (`ops/grafana/orcaai-operacao.json`, versionado - a
-fonte da verdade é o arquivo, não a interface): um dashboard "OrçaAI -
-Operação" com 5 linhas (Custo e LLM, Uso por organização, Funil, Qualidade da
-IA, Saúde). Importar no Grafana Cloud: **Dashboards → New → Import → Upload
-dashboard JSON file** → escolher o arquivo → no campo do data source,
-selecionar o `OrçaAI (Supabase)` → Import. O JSON usa um placeholder
-(`${DS_ORCAAI}`), então não carrega o id do data source de ninguém. Mudou um
-painel na interface? Exporte (Share → Export → "Export for sharing
-externally") e sobrescreva o arquivo no repositório.
-
-Antes de importar, dá pra checar as queries contra a stack local como
-`grafana_reader` - o próprio JSON tem o SQL de cada painel (o macro
-`$__timeFilter(day)` vira `day between now() - interval '30 days' and now()`).
-
-O `tools/grafana-capture-test.py` também cobre o passo 3: gera uma senha só
-pro teste (nunca impressa), conecta como `grafana_reader` e confere que ele
-lê as 9 views e recebe "permission denied" em `quotes`, `customers`,
-`ai_interpretations`, `quote_events`, `organizations` e `profiles`, e que não
-consegue criar tabela.
+Cobre `user_id`/`latency_ms`/custo exato gravados, `ai_quality_metrics` com
+as contagens certas, `compartilhado` só de membro da organização dona do
+orçamento, as views fechadas pra usuário comum, e o `grafana_reader` lendo
+as 9 views mas recebendo "permission denied" em `quotes`, `customers`,
+`ai_interpretations`, `quote_events`, `organizations` e `profiles`. Pra
+checar o SQL do dashboard antes de importar: cada painel tem a query no
+JSON; troque `$__timeFilter(day)` por
+`day between now() - interval '30 days' and now()` e rode como
+`grafana_reader`.
 
 ### Testando a `interpret-quote` localmente
 
