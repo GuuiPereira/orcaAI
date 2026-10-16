@@ -1,0 +1,756 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_ORCAAI",
+      "label": "OrçaAI (Supabase)",
+      "description": "Data source PostgreSQL com o papel grafana_reader",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "datasource",
+      "id": "grafana-postgresql-datasource",
+      "name": "PostgreSQL",
+      "version": "1.0.0"
+    }
+  ],
+  "title": "OrçaAI - Operação",
+  "uid": "orcaai-operacao",
+  "description": "Fase 5 (.tasks/fase-5-grafana.md). Só contagens, somas e tempos - nunca conteúdo (RNF-008). Custos em dólar, estimados.",
+  "tags": [
+    "orcaai"
+  ],
+  "timezone": "America/Sao_Paulo",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "",
+  "schemaVersion": 39,
+  "editable": true,
+  "panels": [
+    {
+      "type": "row",
+      "title": "Custo e LLM",
+      "collapsed": false,
+      "id": 1,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Custo de IA no mês (US$)",
+      "description": "Interpretação + áudio/imagem (Fase 4A), estimado pela tabela de preços. Atenção: o custo de interpretação é gravado em centavos INTEIROS e arredonda para 0 com modelos baratos.",
+      "id": 2,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select coalesce(sum(total_cost_cents), 0) / 100.0 as \"US$\"\nfrom metrics_cost_monthly\nwhere month = date_trunc('month', now())::date"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Custo por orçamento emitido no mês (US$)",
+      "description": "PRD §11 - custo de IA por orçamento.",
+      "id": 3,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select cost_cents_per_quote_issued / 100.0 as \"US$\"\nfrom metrics_cost_monthly\nwhere month = date_trunc('month', now())::date"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Interpretações no período",
+      "description": "",
+      "id": 4,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select coalesce(sum(interpretations), 0) as total\nfrom metrics_ai_daily\nwhere $__timeFilter(day)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Leituras de áudio/imagem no período",
+      "description": "",
+      "id": 5,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select coalesce(sum(extractions), 0) as total\nfrom metrics_extractions_daily\nwhere $__timeFilter(day)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Custo diário (US$)",
+      "description": "",
+      "id": 6,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "select day::timestamp as time, sum(cost_cents) / 100.0 as \"Interpretação\"\nfrom metrics_ai_daily\nwhere $__timeFilter(day)\ngroup by 1\norder by 1"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "select day::timestamp as time, sum(cost_cents) / 100.0 as \"Áudio/imagem\"\nfrom metrics_extractions_daily\nwhere $__timeFilter(day)\ngroup by 1\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latência da IA (ms, só chamadas concluídas)",
+      "description": "RNF-002 pede interpretação em ~10 s. Linhas anteriores à Fase 5 não têm latência.",
+      "id": 7,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "select day::timestamp as time, model_version || ' p50' as metric, p50_ms as value\nfrom metrics_ai_latency_daily where $__timeFilter(day)\nunion all\nselect day::timestamp, model_version || ' p95', p95_ms\nfrom metrics_ai_latency_daily where $__timeFilter(day)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "pointSize": 6,
+            "showPoints": "always"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Uso por organização",
+      "collapsed": false,
+      "id": 8,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Organizações ativas no período",
+      "description": "",
+      "id": 9,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select count(distinct organization_id) as total\nfrom metrics_usage_daily\nwhere $__timeFilter(day) and (interpretations > 0 or quotes_created > 0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Uso por organização no período",
+      "description": "Identificação: id curto + nome da empresa (decisão de 2026-10-15). Pode ser dado pessoal se o testador usou o próprio nome - só o operador vê.",
+      "id": 10,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select\n  organization_short_id as \"Org\",\n  trade_name as \"Empresa\",\n  sum(quotes_created) as \"Criados\",\n  sum(interpretations) as \"Interpretações\",\n  sum(quotes_issued) as \"Emitidos\",\n  sum(tokens) as \"Tokens\",\n  sum(cost_cents) / 100.0 as \"Custo interpretação (US$)\",\n  max(day) as \"Último dia ativo\"\nfrom metrics_usage_daily\nwhere $__timeFilter(day)\ngroup by 1, 2\norder by \"Criados\" desc"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "type": "row",
+      "title": "Funil",
+      "collapsed": false,
+      "id": 11,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "panels": []
+    },
+    {
+      "type": "barchart",
+      "title": "Funil no período",
+      "description": "criado → interpretado → emitido → compartilhado → enviado/aprovado. 'compartilhado' só aparece depois que o app com o evento chegar aos aparelhos.",
+      "id": 12,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select step as \"Etapa\", sum(total) as \"Orçamentos\"\nfrom metrics_funnel_daily\nwhere $__timeFilter(day)\ngroup by step\norder by case step when 'criado' then 1 when 'interpretado' then 2 when 'emitido' then 3 when 'compartilhado' then 4 when 'enviado' then 5 when 'aprovado' then 6 when 'recusado' then 7 when 'expirado' then 8 else 9 end"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "Etapa",
+        "showValue": "always",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tempo até compartilhar (minutos)",
+      "description": "North star do PRD §11: do orçamento criado ao 1º compartilhamento do PDF, pelo dia de criação.",
+      "id": 13,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "select day::timestamp as time,\n  median_seconds_to_share / 60.0 as \"Mediana\",\n  p90_seconds_to_share / 60.0 as \"p90\"\nfrom metrics_time_to_share_daily\nwhere $__timeFilter(day)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "custom": {
+            "drawStyle": "line",
+            "pointSize": 6,
+            "showPoints": "always"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Qualidade da IA",
+      "collapsed": false,
+      "id": 14,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Qualidade por versão de prompt",
+      "description": "Compara a última interpretação com o que foi emitido, por POSIÇÃO do item - boa para tendência, não para auditar um orçamento. Todo o histórico (não segue o filtro de período).",
+      "id": 15,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select\n  prompt_version as \"Prompt\",\n  quotes_compared as \"Emissões comparadas\",\n  pct_fully_accepted as \"% aceito sem alteração\",\n  avg_fields_changed as \"Média campos alterados\",\n  avg_items_added as \"Média itens adicionados\",\n  avg_items_removed as \"Média itens removidos\"\nfrom metrics_ai_quality_by_prompt\norder by prompt_version desc"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "type": "row",
+      "title": "Saúde",
+      "collapsed": false,
+      "id": 16,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Interpretações: falhas e schema inválido",
+      "description": "",
+      "id": 17,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 0,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "select day::timestamp as time,\n  sum(succeeded) as \"Concluídas\",\n  sum(failed) as \"Falhas\",\n  sum(invalid_schema) as \"Schema inválido\"\nfrom metrics_ai_daily\nwhere $__timeFilter(day)\ngroup by 1\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Leituras de áudio/imagem: resultado",
+      "description": "",
+      "id": 18,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 10,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "select day::timestamp as time, kind || ' ok' as metric, sum(succeeded) as value\nfrom metrics_extractions_daily where $__timeFilter(day) group by 1, 2\nunion all\nselect day::timestamp, kind || ' sem texto', sum(no_text)\nfrom metrics_extractions_daily where $__timeFilter(day) group by 1, 2\nunion all\nselect day::timestamp, kind || ' outras falhas', sum(failed - no_text)\nfrom metrics_extractions_daily where $__timeFilter(day) group by 1, 2\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Versões emitidas com PDF salvo",
+      "description": "Só o app nativo salva o PDF; emissões feitas no navegador ficam sem. Todo o histórico.",
+      "id": 19,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ORCAAI}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 41
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ORCAAI}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "select case when versions = 0 then null else 100.0 * with_pdf / versions end as pct\nfrom metrics_pdf_coverage"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  }
+}

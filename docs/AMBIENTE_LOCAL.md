@@ -874,6 +874,20 @@ Connection string > Session pooler - o host **não** dá pra deduzir só da
 região); porta `5432`; usuário `grafana_reader.rqdrwcrbcdrdxzfwtiwv` (papel
 customizado no pooler = `<papel>.<ref>`); banco `postgres`; SSL `require`.
 
+**Passo 4 - dashboard** (`ops/grafana/orcaai-operacao.json`, versionado - a
+fonte da verdade é o arquivo, não a interface): um dashboard "OrçaAI -
+Operação" com 5 linhas (Custo e LLM, Uso por organização, Funil, Qualidade da
+IA, Saúde). Importar no Grafana Cloud: **Dashboards → New → Import → Upload
+dashboard JSON file** → escolher o arquivo → no campo do data source,
+selecionar o `OrçaAI (Supabase)` → Import. O JSON usa um placeholder
+(`${DS_ORCAAI}`), então não carrega o id do data source de ninguém. Mudou um
+painel na interface? Exporte (Share → Export → "Export for sharing
+externally") e sobrescreva o arquivo no repositório.
+
+Antes de importar, dá pra checar as queries contra a stack local como
+`grafana_reader` - o próprio JSON tem o SQL de cada painel (o macro
+`$__timeFilter(day)` vira `day between now() - interval '30 days' and now()`).
+
 O `tools/grafana-capture-test.py` também cobre o passo 3: gera uma senha só
 pro teste (nunca impressa), conecta como `grafana_reader` e confere que ele
 lê as 9 views e recebe "permission denied" em `quotes`, `customers`,
