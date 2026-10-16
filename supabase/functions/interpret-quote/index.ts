@@ -133,6 +133,9 @@ export default {
         prompt_version: AI_PROMPT_VERSION,
         schema_version: AI_INTERPRETATION_SCHEMA_VERSION,
         model_version: openAiModel,
+        // Fase 5 (Grafana): quem chamou - linhas anteriores a esta coluna
+        // ficam null, sem backfill inventado.
+        user_id: ctx.userClaims?.id ?? null,
       })
       .select("id")
       .single();
@@ -143,6 +146,10 @@ export default {
 
     const prompt = buildInterpretationPrompt(quote.source_text);
 
+    // Fase 5 (Grafana): mede só a chamada à OpenAI, não o resto da function
+    // (carregar o orçamento, gravar no banco etc.) - é essa a latência que
+    // RNF-002 ("interpretação em ~10s") se importa.
+    const requestStartedAt = Date.now();
     let openAiPayload: OpenAiResponsesResult;
     try {
       const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
@@ -178,10 +185,11 @@ export default {
     } catch (_error) {
       await ctx.supabase
         .from("ai_interpretations")
-        .update({ status: "falhou", error: "ai_request_failed" })
+        .update({ status: "falhou", error: "ai_request_failed", latency_ms: Date.now() - requestStartedAt })
         .eq("id", interpretation.id);
       return Response.json({ message: "AI request failed" }, { status: 502 });
     }
+    const latencyMs = Date.now() - requestStartedAt;
 
     const outputText = extractOutputText(openAiPayload);
     const parsedOutput = outputText ? JSON.parse(outputText) : null;
@@ -193,6 +201,7 @@ export default {
         .update({
           status: "falhou",
           error: `invalid_ai_schema: ${validation.error.issues.map((issue) => issue.path.join(".")).join(", ")}`,
+          latency_ms: latencyMs,
         })
         .eq("id", interpretation.id);
       return Response.json({ message: "AI response did not match the expected schema" }, { status: 502 });
@@ -207,6 +216,7 @@ export default {
         uncertain_fields: deriveUncertainFields(result),
         usage: openAiPayload.usage ?? null,
         estimated_cost_cents: estimateCostCents(openAiModel, openAiPayload.usage),
+        latency_ms: latencyMs,
       })
       .eq("id", interpretation.id);
 

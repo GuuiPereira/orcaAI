@@ -276,6 +276,16 @@ export async function markQuoteStatus(quoteId: string, status: ManuallySettableQ
   await logQuoteEvent(quoteId, status);
 }
 
+// Fase 5 (Grafana, docs/.tasks/fase-5-grafana.md): dispara quando o usuário
+// efetivamente aciona o compartilhamento do PDF - alimenta a north star do
+// PRD §11 ("tempo mediano até compartilhar um orçamento confirmado"). Só
+// registra a ação; não sabe (nem pode saber) se o cliente recebeu de
+// verdade. Falha aqui não deve quebrar o compartilhamento em si, que já
+// aconteceu quando isso é chamado - por isso não propaga erro.
+export function logQuoteShared(quoteId: string): void {
+  logQuoteEvent(quoteId, 'compartilhado').catch(() => {});
+}
+
 export type QuoteEvent = {
   id: string;
   eventType: string;

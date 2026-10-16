@@ -815,6 +815,35 @@ insert into quote_events (quote_id, event_type, actor_user_id)
 "
 ```
 
+### Captura pro Grafana - passo 1 (Fase 5)
+
+`.tasks/fase-5-grafana.md`. Sem tela ainda - só o que fica gravado:
+
+- `ai_interpretations` ganhou `user_id` (quem chamou, do JWT) e `latency_ms`
+  (medido só em volta da chamada à OpenAI, dentro de `interpret-quote`).
+  Linhas de antes da migração `20261016015445` ficam `null` nos dois.
+- `compartilhado` entrou na allowlist de `quote_events_insert_member` (ver
+  seção "Histórico, busca e estados comerciais" acima) - o editor dispara
+  isso ao compartilhar o PDF (`lib/quotes.ts#logQuoteShared`), é a north
+  star do PRD §11 ("tempo até compartilhar").
+- Nova tabela `ai_quality_metrics`: uma linha por emissão que tinha uma
+  interpretação concluída pra comparar, só contagens (`estimated_cost_cents`
+  nunca entra aqui - é custo, não qualidade). `issue-quote` compara os itens
+  da IA com o que foi emitido **por posição** (sem id estável por item) -
+  serve pra tendência em dashboard, não pra auditar um orçamento específico.
+
+Testar (`tools/grafana-capture-test.py`, gasta centavos de uma interpretação):
+
+```bash
+pnpm exec supabase functions serve --env-file supabase/functions/interpret-quote/.env.local
+python3 tools/grafana-capture-test.py
+```
+
+Cobre `user_id`/`latency_ms` gravados, `ai_quality_metrics` com as contagens
+certas (editei um item, adicionei outro, um ficou igual), `compartilhado`
+aceito só de membro da organização dona do orçamento, outros tipos de evento
+continuam recusados, e nenhuma das tabelas novas é lida pela API pública.
+
 ### Testando a `interpret-quote` localmente
 
 Essa function precisa de duas coisas além da stack local rodando: segredos de

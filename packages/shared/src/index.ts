@@ -2,6 +2,7 @@ export * from "./ai/interpretation.ts";
 export * from "./ai/json-schema.ts";
 export * from "./ai/model-pricing.ts";
 export * from "./ai/prompt.ts";
+export * from "./ai/quality.ts";
 export * from "./calc/money.ts";
 export * from "./calc/quote-totals.ts";
 export * from "./domain/address.ts";

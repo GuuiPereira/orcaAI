@@ -6,8 +6,10 @@ import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   calculateQuoteTotals,
   commercialTermsSchema,
+  computeAiQualityMetrics,
   discountSchema,
   quoteItemTypeSchema,
+  type AiQualityItemLike,
 } from "../../../packages/shared/src/index.ts";
 
 // docs/ARCHITECTURE.md §7-8 - emissão, numeração e versões imutáveis.
@@ -239,6 +241,40 @@ export default {
       actor_user_id: ctx.userClaims?.id ?? null,
       metadata: { version: nextVersion, number },
     });
+
+    // Fase 5 (Grafana): qualidade da IA (PRD §11) - compara o que a última
+    // interpretação devolveu com o que foi de fato emitido, só em contagens
+    // (ver computeAiQualityMetrics). Sem interpretação concluída pra este
+    // orçamento (digitado do zero, ou IA nunca rodou), não há o que medir -
+    // não cria linha. Falha aqui não deve derrubar a emissão, que já valeu.
+    try {
+      const { data: lastInterpretation } = await ctx.supabase
+        .from("ai_interpretations")
+        .select("id, result")
+        .eq("quote_id", quoteId)
+        .eq("status", "concluido")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const aiItems = (lastInterpretation?.result as { items?: AiQualityItemLike[] } | null)?.items;
+      if (lastInterpretation && Array.isArray(aiItems)) {
+        const metrics = computeAiQualityMetrics(aiItems, items);
+        await ctx.supabaseAdmin.from("ai_quality_metrics").insert({
+          quote_id: quoteId,
+          version: nextVersion,
+          interpretation_id: lastInterpretation.id,
+          items_from_ai: metrics.itemsFromAi,
+          items_emitted: metrics.itemsEmitted,
+          items_added: metrics.itemsAdded,
+          items_removed: metrics.itemsRemoved,
+          items_unchanged: metrics.itemsUnchanged,
+          items_changed: metrics.itemsChanged,
+          fields_changed: metrics.fieldsChanged,
+        });
+      }
+    } catch (_error) {
+      // best-effort - ver comentário acima.
+    }
 
     return Response.json({ quote: updatedQuote, version: insertedVersion, idempotent: false });
   })),

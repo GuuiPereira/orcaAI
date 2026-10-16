@@ -43,6 +43,7 @@ import { saveIssuedQuotePdf } from '@/lib/quote-pdf-storage';
 import {
   issueQuote,
   listQuoteEvents,
+  logQuoteShared,
   markQuoteStatus,
   updateQuoteCustomer,
   type IssueQuoteItem,
@@ -623,6 +624,7 @@ export default function QuoteEditorScreen() {
         const materialHtml = buildHtmlFor('material');
         if (serviceHtml) await shareQuotePdf(serviceHtml, pdfFileName('service'));
         if (materialHtml) await shareQuotePdf(materialHtml, pdfFileName('material'));
+        if ((serviceHtml || materialHtml) && quoteId) logQuoteShared(quoteId);
         return;
       }
       const html = buildHtmlFor(pdfMode);
@@ -736,6 +738,7 @@ export default function QuoteEditorScreen() {
     setGeneratingPdf(true);
     try {
       await shareQuotePdf(previewHtml, previewFileName);
+      if (quoteId) logQuoteShared(quoteId);
     } catch (error) {
       reportError(error, 'pdf-share');
       Alert.alert(
