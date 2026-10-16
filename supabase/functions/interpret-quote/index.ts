@@ -2,6 +2,12 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { z } from "zod";
 import { rejectIfPendingDeletion } from "../_shared/account.ts";
+import {
+  dailyLimitResponse,
+  getOrganizationQuota,
+  organizationSuspendedResponse,
+  quotaUnavailableResponse,
+} from "../_shared/quota.ts";
 import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   AI_INTERPRETATION_JSON_SCHEMA,
@@ -87,7 +93,7 @@ export default {
     // orçamento consegue ler esta linha (docs/ARCHITECTURE.md §4, passo 3).
     const { data: quote, error: quoteError } = await ctx.supabase
       .from("quotes")
-      .select("id, source_text")
+      .select("id, source_text, organization_id")
       .eq("id", quoteId)
       .maybeSingle();
 
@@ -100,6 +106,11 @@ export default {
     if (!quote.source_text || quote.source_text.trim().length === 0) {
       return Response.json({ message: "quote has no source_text to interpret" }, { status: 422 });
     }
+
+    // Fase 6: organização suspensa não usa IA (nem a interpretação já pronta).
+    const quota = await getOrganizationQuota(ctx.supabaseAdmin, quote.organization_id);
+    if (!quota) return quotaUnavailableResponse();
+    if (quota.suspended) return organizationSuspendedResponse();
 
     const { data: existing } = await ctx.supabase
       .from("ai_interpretations")
@@ -117,6 +128,11 @@ export default {
         return Response.json({ message: "interpretation already in progress" }, { status: 409 });
       }
     }
+
+    // Fase 6: limite por organização a cada 24h - só pesa quando vai haver
+    // uma chamada nova à IA (devolver a interpretação já pronta, acima, não
+    // conta).
+    if (quota.interpretations_24h >= quota.daily_interpretations) return dailyLimitResponse();
 
     const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
     const openAiModel = requestedModel ?? Deno.env.get("OPENAI_MODEL");

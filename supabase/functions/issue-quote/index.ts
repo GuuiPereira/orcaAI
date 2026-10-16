@@ -2,6 +2,11 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { z } from "zod";
 import { rejectIfPendingDeletion } from "../_shared/account.ts";
+import {
+  getOrganizationQuota,
+  organizationSuspendedResponse,
+  quotaUnavailableResponse,
+} from "../_shared/quota.ts";
 import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   calculateQuoteTotals,
@@ -79,6 +84,11 @@ export default {
     if (!quote) {
       return Response.json({ message: "quote not found" }, { status: 404 });
     }
+
+    // Fase 6: organização suspensa não emite.
+    const quota = await getOrganizationQuota(ctx.supabaseAdmin, quote.organization_id);
+    if (!quota) return quotaUnavailableResponse();
+    if (quota.suspended) return organizationSuspendedResponse();
 
     const [organizationResult, customerResult] = await Promise.all([
       ctx.supabase

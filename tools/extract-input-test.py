@@ -3,8 +3,9 @@
 Uso: python3 tools/extract-input-test.py <pasta-com-media/>
 A pasta precisa de media/{fala.mp3,bilhete.png,conversa.png,injecao.png,vazia.png}: um áudio em pt-BR,
 imagens com texto (bilhete, print de conversa), uma imagem com uma "instrução" embutida e uma sem texto.
-Sobe com: supabase functions serve --env-file <arquivo com OPENAI_API_KEY, OPENAI_MODEL e EXTRACTION_DAILY_LIMIT=5>
-(o limite 5 é o que o teste do 429 espera). Gasta centavos de dólar de OpenAI.
+Sobe com: supabase functions serve --env-file <arquivo com OPENAI_API_KEY e OPENAI_MODEL>
+O limite diário da organização de teste é posto em 5 direto no banco (organization_limits,
+Fase 6) - é o que o teste do 429 espera. Gasta centavos de dólar de OpenAI.
 """
 import json, subprocess, sys, time, uuid, urllib.request, urllib.error
 
@@ -64,6 +65,8 @@ def make_account(tag, with_org=True):
     return dict(token=token, uid=uid, org=org)
 
 A = make_account("A"); NOORG = make_account("semorg", with_org=False)
+# Fase 6: o limite é por organização no banco (antes: EXTRACTION_DAILY_LIMIT na function).
+psql(f"insert into organization_limits (organization_id, daily_extractions) values ('{A['org']}', 5)")
 img = lambda n: (("file", f"{n}.png", "image/png", rd(f"{n}.png")))
 
 # --- autenticação / autorização
@@ -106,7 +109,7 @@ ok("INJEÇÃO: a resposta NÃO virou o comando da imagem", not d["text"].strip()
 st, d = extract(A["token"], "image", [img("vazia")])
 ok("imagem SEM texto: erro claro (422 no_text)", st == 422 and d.get("code") == "no_text", f"{st} {d}")
 
-# --- limite diário (configurado em 5): áudio + 3 imagens + a vazia = 5
+# --- limite diário (5, posto no banco acima): áudio + 3 imagens + a vazia = 5
 st, d = extract(A["token"], "image", [img("bilhete")])
 ok("limite diário por organização (429)", st == 429 and d.get("code") == "daily_limit", f"{st} {d}")
 

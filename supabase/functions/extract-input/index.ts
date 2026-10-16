@@ -1,6 +1,12 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { withSupabase } from "@supabase/server";
 import { rejectIfPendingDeletion } from "../_shared/account.ts";
+import {
+  dailyLimitResponse,
+  getOrganizationQuota,
+  organizationSuspendedResponse,
+  quotaUnavailableResponse,
+} from "../_shared/quota.ts";
 import { withErrorReporting } from "../_shared/sentry.ts";
 import {
   AI_EXTRACTION_PROMPT_VERSION,
@@ -22,7 +28,6 @@ import {
 // metadados). O texto volta pro app, o usuário revisa/edita e só então segue
 // pro fluxo normal de interpretação.
 
-const DAILY_LIMIT = Number(Deno.env.get("EXTRACTION_DAILY_LIMIT") ?? "60");
 const OPENAI_TIMEOUT_MS = 90_000;
 const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
@@ -179,17 +184,14 @@ export default {
       return Response.json({ message: "invalid image files" }, { status: 400 });
     }
 
-    // Limite de abuso por organização/dia: cada extração é uma chamada paga
-    // disparada pelo usuário.
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count } = await ctx.supabaseAdmin
-      .from("input_extractions")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", organizationId)
-      .gte("created_at", since);
-    if ((count ?? 0) >= DAILY_LIMIT) {
-      return Response.json({ message: "daily limit reached", code: "daily_limit" }, { status: 429 });
-    }
+    // Fase 6: organização suspensa não usa IA; e limite de abuso por
+    // organização a cada 24h (cada extração é uma chamada paga disparada pelo
+    // usuário) - padrão do sistema ou o que o admin definiu
+    // (organization_ai_quota no banco).
+    const quota = await getOrganizationQuota(ctx.supabaseAdmin, organizationId);
+    if (!quota) return quotaUnavailableResponse();
+    if (quota.suspended) return organizationSuspendedResponse();
+    if (quota.extractions_24h >= quota.daily_extractions) return dailyLimitResponse();
 
     const apiKey = Deno.env.get("OPENAI_API_KEY");
     const imageModel = Deno.env.get("OPENAI_MODEL");

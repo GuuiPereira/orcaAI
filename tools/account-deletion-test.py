@@ -2,7 +2,7 @@ import json, subprocess, sys, time, urllib.request, urllib.error
 
 BASE = "http://127.0.0.1:54321"
 ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0"
-SECRET = json.loads(subprocess.run("pnpm exec supabase status -o json 2>/dev/null", shell=True, capture_output=True, text=True, cwd="/home/guilherme/Projetos/OrçaAI").stdout)["SECRET_KEY"]
+SECRET = json.loads(subprocess.run(["/home/guilherme/Projetos/OrçaAI/node_modules/.bin/supabase", "status", "-o", "json"], capture_output=True, text=True, cwd="/home/guilherme/Projetos/OrçaAI").stdout)["SECRET_KEY"]
 
 def call(method, path, token=None, body=None, apikey=ANON, raw=None, ctype="application/json", extra=None):
     headers = {"apikey": apikey, "Content-Type": ctype}

@@ -132,6 +132,127 @@ st, d = http("POST", "/rest/v1/rpc/admin_organization_detail", A["token"],
              {"target_organization_id": "00000000-0000-4000-8000-000000000000"})
 ok("organização inexistente dá 404", st == 404, f"{st} {d}")
 
+# ---------------------------------------------------------------- passo 3
+print("== passo 3: ações (limite, suspensão, destravar) e onde são aplicadas")
+import base64, uuid
+# PNG 1x1 válido - a recusa por limite/suspensão vem antes de qualquer chamada à IA.
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+
+
+def extract_image(token):
+    b = uuid.uuid4().hex
+    body = (f'--{b}\r\nContent-Disposition: form-data; name="kind"\r\n\r\nimage\r\n'
+            f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="x.png"\r\nContent-Type: image/png\r\n\r\n').encode() \
+        + PNG + f"\r\n--{b}--\r\n".encode()
+    req = urllib.request.Request(BASE + "/functions/v1/extract-input", data=body, method="POST",
+                                 headers={"apikey": ANON, "Authorization": f"Bearer {token}",
+                                          "Content-Type": f"multipart/form-data; boundary={b}"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r: return r.status, json.loads(r.read().decode() or "null")
+    except urllib.error.HTTPError as e:
+        t = e.read().decode()
+        try: return e.code, json.loads(t)
+        except Exception: return e.code, t
+
+
+def admin(fn, acc, **args):
+    return http("POST", f"/rest/v1/rpc/{fn}", acc["token"], args)
+
+
+def quota_of(org):
+    return http("POST", "/rest/v1/rpc/organization_ai_quota", None, {"target_organization_id": org}, apikey=SECRET)[1][0]
+
+
+ISSUE_BODY = {"quote_id": quote_b, "discount": None,
+              "items": [{"type": "service", "description": "Item de teste", "category": None, "quantity": None,
+                         "unit": None, "total_price_cents": 10000}],
+              "commercial_terms": {"payment_terms": None, "estimated_duration_days": None, "validity_days": None}}
+
+# --- limites
+st, d = admin("admin_set_limits", B, target_organization_id=B["org"], daily_interpretations=1, daily_extractions=1, reason="tentando")
+ok("usuário comum NÃO define limite", st == 403, f"{st} {d}")
+st, d = admin("admin_set_limits", A, target_organization_id=B["org"], daily_interpretations=1, daily_extractions=1, reason=" ")
+ok("limite sem motivo é recusado (400)", st == 400, f"{st} {d}")
+st, d = admin("admin_set_limits", A, target_organization_id=B["org"], daily_interpretations=-3, daily_extractions=None, reason="valor inválido")
+ok("limite negativo é recusado (400)", st == 400, f"{st} {d}")
+st, d = admin("admin_set_limits", A, target_organization_id="00000000-0000-4000-8000-000000000000",
+              daily_interpretations=1, daily_extractions=1, reason="organização que não existe")
+ok("limite em organização inexistente dá 404", st == 404, f"{st} {d}")
+st, d = admin("admin_set_limits", A, target_organization_id=B["org"], daily_interpretations=1, daily_extractions=1,
+              reason="Teste de freio de custo")
+ok("admin define limite 1/1 em B", st in (200, 204), f"{st} {d}")
+q = quota_of(B["org"])
+ok("limite efetivo de B virou 1/1 (sobrescrito)", q["daily_interpretations"] == 1 and q["daily_extractions"] == 1 and q["limits_overridden"], str(q))
+
+# B já tem 1 interpretação e 1 leitura nas últimas 24h (passo 2) -> as duas estouram sem chamar a IA
+st, d = http("POST", "/functions/v1/interpret-quote", B["token"], {"quote_id": quote_b})
+ok("interpret-quote recusa acima do limite (429 daily_limit)", st == 429 and d.get("code") == "daily_limit", f"{st} {d}")
+st, d = extract_image(B["token"])
+ok("extract-input recusa acima do limite (429 daily_limit)", st == 429 and d.get("code") == "daily_limit", f"{st} {d}")
+
+st, d = admin("admin_set_limits", A, target_organization_id=B["org"], daily_interpretations=None, daily_extractions=None,
+              reason="Volta ao padrão")
+q = quota_of(B["org"])
+ok("limite null volta ao padrão do sistema (100/60)",
+   st in (200, 204) and q["daily_interpretations"] == 100 and q["daily_extractions"] == 60 and not q["limits_overridden"], str(q))
+ok("padrão: A (sem limite próprio) também tem 100/60", quota_of(A["org"])["daily_interpretations"] == 100)
+
+# --- suspensão
+st, d = admin("admin_suspend_organization", B, target_organization_id=B["org"], reason="me suspendendo")
+ok("usuário comum NÃO suspende", st == 403, f"{st} {d}")
+st, d = admin("admin_suspend_organization", A, target_organization_id=B["org"], reason="Uso suspeito no teste")
+ok("admin suspende B", st in (200, 204), f"{st} {d}")
+st, d = admin("admin_suspend_organization", A, target_organization_id=B["org"], reason="de novo")
+ok("suspender de novo dá 409", st == 409, f"{st} {d}")
+st, d = http("POST", "/functions/v1/interpret-quote", B["token"], {"quote_id": quote_b})
+ok("suspensa: interpret-quote recusa (403 organization_suspended)", st == 403 and d.get("code") == "organization_suspended", f"{st} {d}")
+st, d = http("POST", "/functions/v1/issue-quote", B["token"], ISSUE_BODY)
+ok("suspensa: issue-quote recusa (403 organization_suspended)", st == 403 and d.get("code") == "organization_suspended", f"{st} {d}")
+st, d = extract_image(B["token"])
+ok("suspensa: extract-input recusa (403 organization_suspended)", st == 403 and d.get("code") == "organization_suspended", f"{st} {d}")
+st, d = http("PATCH", f"/rest/v1/organizations?id=eq.{B['org']}", B["token"], {"suspended_at": None})
+ok("B NÃO tira a própria suspensão pela API", st in (401, 403), f"{st} {d}")
+st, d = http("PATCH", f"/rest/v1/organizations?id=eq.{B['org']}", B["token"], {"trade_name": "Empresa comum editada"})
+ok("B continua editando o perfil (só a suspensão é protegida)", st in (200, 204), f"{st} {d}")
+st, d = http("GET", f"/rest/v1/quotes?organization_id=eq.{B['org']}&select=id,suspended:organizations(suspended_at)", B["token"])
+ok("suspensa: B ainda lê os próprios dados e enxerga que está suspensa",
+   st == 200 and len(d) == 1 and d[0]["suspended"]["suspended_at"] is not None, f"{st} {d}")
+ok("lista do admin mostra B suspensa", any(r["organization_id"] == B["org"] and r["suspended_at"]
+                                            for r in admin("admin_list_organizations", A)[1]))
+
+st, d = admin("admin_reactivate_organization", A, target_organization_id=B["org"], reason="Falso alarme")
+ok("admin reativa B", st in (200, 204), f"{st} {d}")
+st, d = admin("admin_reactivate_organization", A, target_organization_id=B["org"], reason="de novo")
+ok("reativar quem não está suspensa dá 409", st == 409, f"{st} {d}")
+st, d = http("POST", "/functions/v1/issue-quote", B["token"], ISSUE_BODY)
+ok("reativada: B volta a emitir (200)", st == 200, f"{st} {d}")
+
+# --- destravar interpretação presa
+psql(f"insert into ai_interpretations (quote_id, status, created_at) values ('{quote_b}', 'processando', now() - interval '20 minutes')")
+psql(f"insert into ai_interpretations (quote_id, status, created_at) values ('{quote_b}', 'processando', now() - interval '2 minutes')")
+row_b = next(r for r in admin("admin_list_organizations", A)[1] if r["organization_id"] == B["org"])
+ok("lista mostra 1 interpretação presa (só a de >10 min)", row_b["stuck_interpretations"] == 1, str(row_b["stuck_interpretations"]))
+st, d = admin("admin_unstick_interpretations", B, target_organization_id=B["org"], reason="destravando")
+ok("usuário comum NÃO destrava", st == 403, f"{st} {d}")
+st, d = admin("admin_unstick_interpretations", A, target_organization_id=B["org"], reason="Function caiu no meio")
+ok("admin destrava 1 interpretação", st == 200 and d == 1, f"{st} {d}")
+states = psql(f"select string_agg(status || ':' || coalesce(error, ''), ',' order by created_at) from ai_interpretations "
+              f"where quote_id = '{quote_b}' and created_at > now() - interval '1 hour' and status <> 'falhou' or error = 'unstuck_by_admin'")
+ok("a antiga virou falha 'unstuck_by_admin'; a recente (2 min) segue em andamento",
+   "falhou:unstuck_by_admin" in states and "processando:" in states, states)
+st, d = admin("admin_unstick_interpretations", A, target_organization_id=B["org"], reason="de novo")
+ok("sem nada preso, destravar dá 409", st == 409, f"{st} {d}")
+
+# --- auditoria
+acts = psql(f"select string_agg(action, ',' order by created_at) from admin_actions where organization_id = '{B['org']}'")
+ok("toda ação ficou na auditoria, na ordem",
+   acts == "suspend,set_limits,set_limits,suspend,reactivate,unstick_interpretation", acts)
+prev = psql(f"select details -> 'previous' ->> 'daily_interpretations' from admin_actions where organization_id = '{B['org']}' "
+            f"and action = 'set_limits' order by created_at desc limit 1")
+ok("auditoria do limite guarda o valor anterior", prev == "1", prev)
+ok("ações recusadas (409/400/403) NÃO viraram auditoria",
+   psql(f"select count(*) from admin_actions where organization_id = '{B['org']}' and reason in ('de novo', 'tentando', 'me suspendendo')") == "0")
+
 print()
 print("RESULTADO:", "TUDO OK" if ok.failed == 0 else f"{ok.failed} FALHA(S)")
 sys.exit(1 if ok.failed else 0)
