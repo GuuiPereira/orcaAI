@@ -15,6 +15,7 @@ import {
 
 import { OrganizationChips } from '@/components/admin-organization-chips';
 import { AdminPlanDialog } from '@/components/admin-plan-dialog';
+import { AdminSupportContactCard } from '@/components/admin-support-contact-card';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import {
   formatDateTime,
@@ -104,6 +105,7 @@ export default function AdminOrganizationsScreen() {
               {organizations.length} organização(ões). Só metadados - o conteúdo dos orçamentos nunca aparece aqui.
             </Text>
             {errorMessage && <Text style={{ color: paperTheme.colors.error }}>{errorMessage}</Text>}
+            <AdminSupportContactCard onSaved={setNotice} />
             {signupPlan && (
               <Card mode="contained">
                 <Card.Content style={styles.signupRow}>

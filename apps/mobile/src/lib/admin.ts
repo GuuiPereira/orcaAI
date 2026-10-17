@@ -70,6 +70,7 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   unstick_interpretation: 'Interpretação destravada',
   set_plan: 'Plano alterado',
   set_signup_plan: 'Plano de cadastro alterado',
+  set_support_contact: 'Contato de suporte alterado',
 };
 
 // Os erros das funções do painel vêm com status próprio (PTxxx no banco).
@@ -81,6 +82,9 @@ function adminErrorMessage(error: { code?: string; message?: string } | null): s
       if (error.message?.startsWith('reason')) return 'Escreva um motivo (de 3 a 500 caracteres).';
       if (error.message?.startsWith('expires_at')) return 'A validade precisa ser uma data futura.';
       if (error.message?.startsWith('unknown plan')) return 'Plano desconhecido.';
+      if (error.message?.startsWith('invalid whatsapp'))
+        return 'WhatsApp inválido: use só números, com DDI e DDD (ex.: 5511999998888).';
+      if (error.message?.startsWith('invalid email')) return 'E-mail inválido.';
       return 'Os limites precisam ser números maiores que zero (ou vazio para usar o padrão).';
     case 'PT404':
       return 'Organização não encontrada.';
@@ -164,6 +168,12 @@ export async function getSignupPlan(): Promise<{ plan: PlanCode; expiresAt: stri
 
 export function setSignupPlan(plan: PlanCode, expiresAt: string | null, reason: string): Promise<void> {
   return call('admin_set_signup_plan', { plan_code: plan, expires_at: plan === 'gratuito' ? null : expiresAt, reason });
+}
+
+// Contato de suporte (seção Ajuda do app, conta suspensa, avisos de plano).
+// Vazio = sem aquele canal. O WhatsApp vai só com dígitos (DDI + DDD).
+export function setSupportContact(whatsapp: string, email: string, reason: string): Promise<void> {
+  return call('admin_set_support_contact', { whatsapp: whatsapp.replace(/\D/g, ''), email: email.trim(), reason });
 }
 
 // "Validade em dias" do formulário -> data ISO (fim do dia N, no aparelho).

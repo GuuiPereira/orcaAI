@@ -916,6 +916,18 @@ organização, `PT409` nada a fazer). Os padrões 100/60 moram no banco
 (`organization_ai_quota`); `lib/admin.ts` só espelha os números pra rotular
 o campo vazio - mudou lá, mude aqui.
 
+**Contato de suporte** (no topo da lista do painel → **Editar**): WhatsApp
+(só números, com DDI e DDD - o app aceita digitar com máscara e limpa) e/ou
+e-mail; vazio = sem aquele canal. Aparece no app como botões que abrem a
+conversa/o e-mail com mensagem pronta: **Perfil > Ajuda** (sempre), tela de
+**conta suspensa** e avisos para assinar o Profissional (seção do plano e
+cadeado de áudio/imagem). Sem contato configurado, os botões somem e fica o
+texto genérico. Tabela `support_settings` (uma linha), lida pelo app via
+`get_support_contact()` (qualquer usuário logado) e gravada só por
+`admin_set_support_contact()` (auditado). Trocar o número **não** precisa de
+update do app. Teste: `python3 tools/support-contact-test.py` (não precisa
+de `functions serve`).
+
 **Virar admin / deixar de ser** (não há tela pra isso, de propósito, e o id
 de ninguém entra nas migrações):
 
@@ -1268,6 +1280,23 @@ pnpm --filter @orcaai/mobile exec expo start --web --port 8090 --clear
 
 O `--clear` limpa o cache de transformação do Metro e força ele a reler
 todos os arquivos do zero.
+
+### Se a API local parar de responder (Kong caído) e o `supabase start` falhar com EACCES
+
+Sintoma: `http://127.0.0.1:54321` recusa conexão, o banco responde, e
+`docker ps -a` mostra `supabase_kong_orcaai` **Exited (127)**. O arquivo de
+configuração temporário do Kong (`supabase/.temp/start-secrets/...`) sumiu,
+o Docker criou no lugar uma **pasta do root**, e aí `supabase start` falha
+com `EACCES: permission denied, rm '.../supabase_kong_orcaai'`. Correção (a
+pasta é temporária e regenerada; o Docker tem a permissão de root que o
+usuário não tem; os dados ficam no volume):
+
+```bash
+pnpm exec supabase stop
+IMG=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -m1 supabase/postgres)
+docker run --rm --entrypoint rm -v "$PWD/supabase/.temp/start-secrets:/s" "$IMG" -rf /s/supabase_kong_orcaai
+pnpm exec supabase start
+```
 
 ### Se `pnpm add`/`pnpm install` der "Unexpected store location"
 

@@ -8,6 +8,7 @@ import { findValueMentions } from '@orcaai/shared';
 import { CustomerPickerModal } from '@/components/customer-picker-modal';
 import { AttachmentBar } from '@/components/attachment-bar';
 import { AttachmentList } from '@/components/attachment-list';
+import { SupportContactButtons } from '@/components/support-contact-buttons';
 import { Image } from 'expo-image';
 import { BottomTabInset, MaxContentWidth, Spacing, WebTopBarInset } from '@/constants/theme';
 import { useQuoteDraft } from '@/hooks/use-quote-draft';
@@ -179,6 +180,7 @@ export default function NewQuoteScreen() {
             <Card mode="outlined">
               <Card.Content style={styles.reviewContent}>
                 <Text variant="bodyMedium">{PLAN_FEATURE_MESSAGE}</Text>
+                <SupportContactButtons message="Olá! Quero assinar o plano Profissional do OrçaAI." />
                 <Button mode="text" onPress={() => setShowPlanHint(false)}>
                   Entendi
                 </Button>

@@ -28,6 +28,7 @@ import {
   type OrganizationProfileInput,
 } from '@/lib/organizations';
 import { ProfilePreviewModal } from '@/components/profile-preview-modal';
+import { SupportContactButtons } from '@/components/support-contact-buttons';
 import { buildProfilePreviewHtml } from '@/lib/quote-preview';
 import { getOrganizationLogoDataUri, getOrganizationLogoUrl, pickAndUploadOrganizationLogo } from '@/lib/storage';
 
@@ -391,6 +392,11 @@ export default function ProfileScreen() {
           </>
         ) : null}
 
+        <Section title="Ajuda">
+          <Text variant="bodyMedium">Dúvida, problema ou sugestão? Fale com a equipe do OrçaAI.</Text>
+          <SupportContactButtons message="Olá! Preciso de ajuda com o OrçaAI." showDetails />
+        </Section>
+
         {isAdmin && (
           <Button mode="outlined" icon="shield-account-outline" onPress={() => router.push('/admin')}>
             Painel admin
@@ -489,6 +495,7 @@ function PlanSection({ entitlements }: { entitlements: Entitlements }) {
             : `No Profissional: orçamentos sem limite, logo no PDF, PDF sem a marca do OrçaAI e entrada por áudio ou imagem. ${UPGRADE_HINT}`}
         </Text>
       )}
+      {isFree && <SupportContactButtons message="Olá! Quero assinar o plano Profissional do OrçaAI." />}
     </Section>
   );
 }
