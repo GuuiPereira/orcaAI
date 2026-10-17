@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -64,6 +65,18 @@ export default function LoginScreen() {
               </ThemedText>
             )}
           </Pressable>
+
+          <ThemedText type="small" themeColor="textSecondary" style={styles.legal}>
+            Ao entrar, você declara que leu a{' '}
+            <ThemedText
+              type="small"
+              style={styles.link}
+              accessibilityRole="link"
+              onPress={() => router.push('/privacy-policy')}>
+              Política de privacidade
+            </ThemedText>
+            .
+          </ThemedText>
         </ThemedView>
       </SafeAreaView>
     </ThemedView>
@@ -104,5 +117,11 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.8,
+  },
+  legal: {
+    textAlign: 'center',
+  },
+  link: {
+    textDecorationLine: 'underline',
   },
 });

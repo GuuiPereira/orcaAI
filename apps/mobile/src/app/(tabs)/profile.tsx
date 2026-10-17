@@ -395,6 +395,9 @@ export default function ProfileScreen() {
         <Section title="Ajuda">
           <Text variant="bodyMedium">Dúvida, problema ou sugestão? Fale com a equipe do OrçaAI.</Text>
           <SupportContactButtons message="Olá! Preciso de ajuda com o OrçaAI." showDetails />
+          <Button mode="text" icon="shield-lock-outline" onPress={() => router.push('/privacy-policy')} style={styles.alignStart}>
+            Política de privacidade
+          </Button>
         </Section>
 
         {isAdmin && (
@@ -533,6 +536,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
+  },
+  alignStart: {
+    alignSelf: 'flex-start',
   },
   logoTextColumn: {
     // Ocupa o resto da linha e quebra o texto (o aviso do plano Gratuito é

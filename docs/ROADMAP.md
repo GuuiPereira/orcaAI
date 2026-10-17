@@ -71,9 +71,10 @@ Objetivo: permitir uso real recorrente por um grupo pequeno.
 Saída: 10 a 20 usuários usando por quatro semanas.
 
 **Status:** construída e publicada (projeto Supabase hospedado, APK 1.1.0,
-EAS Update). Antes de convidar os testadores faltam: teste de um crash
-nativo chegando ao Sentry, canal de feedback e a política de privacidade
-acessível (rascunho em [POLITICA_DE_PRIVACIDADE.md](POLITICA_DE_PRIVACIDADE.md)).
+EAS Update). A política de privacidade abre no app (login e Perfil > Ajuda),
+com os dados do responsável preenchidos pelo painel admin. Antes de convidar
+os testadores faltam: preencher esses dados, teste de um crash nativo chegando
+ao Sentry e o canal de feedback.
 Sobras da emissão: duplicar orçamento (RF-067) e regerar PDF.
 
 ## Fase 3 - Beta comercial

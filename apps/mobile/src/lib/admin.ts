@@ -71,6 +71,7 @@ export const ADMIN_ACTION_LABELS: Record<string, string> = {
   set_plan: 'Plano alterado',
   set_signup_plan: 'Plano de cadastro alterado',
   set_support_contact: 'Contato de suporte alterado',
+  set_privacy_settings: 'Dados da política alterados',
 };
 
 // Os erros das funções do painel vêm com status próprio (PTxxx no banco).
@@ -85,6 +86,10 @@ function adminErrorMessage(error: { code?: string; message?: string } | null): s
       if (error.message?.startsWith('invalid whatsapp'))
         return 'WhatsApp inválido: use só números, com DDI e DDD (ex.: 5511999998888).';
       if (error.message?.startsWith('invalid email')) return 'E-mail inválido.';
+      if (error.message?.startsWith('invalid controller name')) return 'O nome precisa ter de 2 a 200 caracteres.';
+      if (error.message?.startsWith('invalid document'))
+        return 'CPF/CNPJ inválido: use só números e pontuação (ou deixe vazio).';
+      if (error.message?.startsWith('invalid response days')) return 'O prazo de resposta precisa ser de 1 a 15 dias.';
       return 'Os limites precisam ser números maiores que zero (ou vazio para usar o padrão).';
     case 'PT404':
       return 'Organização não encontrada.';
@@ -174,6 +179,21 @@ export function setSignupPlan(plan: PlanCode, expiresAt: string | null, reason: 
 // Vazio = sem aquele canal. O WhatsApp vai só com dígitos (DDI + DDD).
 export function setSupportContact(whatsapp: string, email: string, reason: string): Promise<void> {
   return call('admin_set_support_contact', { whatsapp: whatsapp.replace(/\D/g, ''), email: email.trim(), reason });
+}
+
+// Dados do responsável que entram na política de privacidade. Vazio = campo
+// não preenchido (o texto mostra "(a definir)"). Prazo de 1 a 15 dias.
+export function setPrivacySettings(
+  values: { controllerName: string; controllerDocument: string; privacyEmail: string; responseDays: number | null },
+  reason: string,
+): Promise<void> {
+  return call('admin_set_privacy_settings', {
+    controller_name: values.controllerName.trim(),
+    controller_document: values.controllerDocument.trim(),
+    privacy_email: values.privacyEmail.trim(),
+    response_days: values.responseDays,
+    reason,
+  });
 }
 
 // "Validade em dias" do formulário -> data ISO (fim do dia N, no aparelho).

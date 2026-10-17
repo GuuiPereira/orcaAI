@@ -932,6 +932,35 @@ texto genérico. Tabela `support_settings` (uma linha), lida pelo app via
 update do app. Teste: `python3 tools/support-contact-test.py` (não precisa
 de `functions serve`).
 
+**Política de privacidade** (no topo da lista do painel → **Editar**): os
+dados do responsável que entram no texto - nome ou razão social, CPF/CNPJ
+(opcional: a LGPD pede identificação e contato, não a publicação do CPF de
+pessoa física), e-mail de privacidade e prazo de resposta (1 a 15 dias). O
+card diz se a política está **completa** ou o que falta (o app mostra "(a
+definir)" no lugar). Tabela `privacy_settings`, lida por
+`get_privacy_settings()` **também sem login** (a política abre na tela de
+entrada) e gravada por `admin_set_privacy_settings()` (auditado). Teste:
+`python3 tools/privacy-settings-test.py`.
+
+O **texto** da política é versionado no código, não no banco:
+`packages/shared/src/legal/privacy-policy.ts` é a fonte única - o app mostra
+esse texto (tela `/privacy-policy`, aberta pelo link do login e em Perfil >
+Ajuda, em qualquer estado da conta) e o `docs/POLITICA_DE_PRIVACIDADE.md` é
+**gerado** a partir dele. Para mudar o texto:
+
+```bash
+# 1) edite packages/shared/src/legal/privacy-policy.ts e suba PRIVACY_POLICY_VERSION
+# 2) regenere o doc (um teste falha se ele ficar diferente do template):
+pnpm --filter @orcaai/shared run gen:privacy
+# (se o pnpm reclamar do store: cd packages/shared && node --experimental-strip-types scripts/gen-privacy-policy.ts)
+# 3) eas update - o texto vai dentro do app
+```
+
+Os fatos técnicos do texto foram conferidos em 17/10/2026 e estão listados no
+topo do template (Supabase Free = **sem backup automático**; Sentry Developer,
+EUA, 30 dias; Grafana Cloud em São Paulo). Se algum mudar (ex.: Supabase
+passar pro Pro, com backup de 7 dias), reescreva a seção correspondente.
+
 **Virar admin / deixar de ser** (não há tela pra isso, de propósito, e o id
 de ninguém entra nas migrações):
 

@@ -6,7 +6,8 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:privacy": "node --experimental-strip-types scripts/gen-privacy-policy.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"

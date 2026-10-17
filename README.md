@@ -50,7 +50,8 @@ pintura e serviços gerais no Brasil.
 - planos **Gratuito** (3 orçamentos emitidos por mês, PDF com marca do OrçaAI)
   e **Profissional** - cobrança manual, ativada no painel admin;
 - exclusão de conta com prazo de 7 dias para desistir;
-- seção de ajuda com o contato de suporte (configurado no painel admin).
+- seção de ajuda com o contato de suporte e a política de privacidade
+  (abre também na tela de login, sem entrar).
 
 **Operação:**
 
@@ -99,8 +100,8 @@ por link, equipes. Ver [Roadmap](docs/ROADMAP.md).
 - [Roadmap](docs/ROADMAP.md) - fases e o que já foi feito.
 - [Ambiente local](docs/AMBIENTE_LOCAL.md) - como rodar, testar, publicar e
   operar (Supabase, Expo/EAS, Grafana, painel admin, planos).
-- [Política de privacidade](docs/POLITICA_DE_PRIVACIDADE.md) - rascunho para
-  o teste fechado.
+- [Política de privacidade](docs/POLITICA_DE_PRIVACIDADE.md) - gerada do
+  mesmo texto que o app mostra (rascunho para o teste fechado).
 
 **Rodar localmente:** `pnpm install` e depois `pnpm run dev` (sobe o Supabase
 local, as Edge Functions e o Expo web) - detalhes e pré-requisitos em

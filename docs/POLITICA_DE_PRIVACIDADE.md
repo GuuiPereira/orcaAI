@@ -1,15 +1,20 @@
-# Política de Privacidade do OrçaAI
+<!-- GERADO a partir de packages/shared/src/legal/privacy-policy.ts - não edite à mão.
+     Para mudar o texto: edite o template, suba PRIVACY_POLICY_VERSION e rode
+     `pnpm --filter @orcaai/shared run gen:privacy`. -->
 
-**Versão 0.2 (rascunho para o teste fechado) - 17/10/2026**
-
-> **Status:** rascunho escrito a partir do que o app realmente faz hoje (código,
-> banco e fornecedores conferidos em 24/09/2026 e revistos em 17/10/2026 -
-> entraram o Grafana Cloud, os planos, o painel do administrador e o contato
-> de suporte). Os trechos `[PREENCHER: ...]`
-> dependem de informação do responsável. **Não substitui revisão jurídica** -
-> para o teste fechado com pessoas conhecidas ela cumpre o papel de
+> **Sobre este arquivo:** é a cópia legível da política que o app mostra
+> (tela "Política de privacidade", aberta no login e em Perfil > Ajuda). Os
+> campos `[painel admin: ...]` são preenchidos pelo administrador no painel
+> admin ("Política de privacidade" > Editar) e aparecem no app na hora. Os
+> fatos técnicos (regiões, prazos de retenção, backups) foram conferidos em
+> 17/10/2026 - ver o comentário no topo do template. **Não substitui revisão
+> jurídica**: para o teste fechado com pessoas conhecidas cumpre o papel de
 > transparência; antes de abrir ao público ou cobrar, um advogado deve revisar
 > (ver `docs/ROADMAP.md`, Fase 3).
+
+# Política de Privacidade do OrçaAI
+
+**Versão 0.3 - 17/10/2026**
 
 Esta política explica, em linguagem simples, quais dados o OrçaAI usa, para
 quê, com quem passam por ali e como você exerce seus direitos, conforme a Lei
@@ -20,8 +25,8 @@ Geral de Proteção de Dados (LGPD - Lei 13.709/2018).
 O OrçaAI é um aplicativo que ajuda prestadores de serviço a montar orçamentos
 a partir de um texto, um áudio ou uma imagem.
 
-- **Responsável pelo aplicativo:** `[PREENCHER: nome completo ou razão social + CPF/CNPJ]`
-- **Contato para assuntos de privacidade:** `[PREENCHER: e-mail]`
+- **Responsável pelo aplicativo:** `[painel admin: nome ou razão social]` (`[painel admin: CPF/CNPJ - opcional]`)
+- **Contato para assuntos de privacidade:** `[painel admin: e-mail de privacidade]`
 
 Existem dois papéis diferentes:
 
@@ -35,17 +40,30 @@ Existem dois papéis diferentes:
 
 ## 2. Quais dados coletamos
 
-| Grupo | O que | De onde vem |
-| --- | --- | --- |
-| **Conta** | nome e e-mail da sua conta Google; telefone, se você informar | login com Google; seu perfil |
-| **Sua empresa** | nome fantasia, razão social, CPF/CNPJ, telefone, e-mail, endereço, logotipo, condições comerciais padrão | você preenche no Perfil |
-| **Seus clientes** | nome, telefone, e-mail, documento, endereço, observações | você cadastra ou escreve no orçamento |
-| **Orçamentos** | o texto original, os itens e valores, local do serviço, condições, versões emitidas e o PDF gerado | você cria; o PDF é gerado pelo app |
-| **Áudio e imagens** | o áudio que você grava e as fotos/prints que anexa (ver seção 4) | você anexa |
-| **Uso técnico** | para cada leitura de áudio/imagem: tipo, duração ou nº de imagens, tamanho, modelo usado, custo estimado, tempo e se deu certo. Para cada interpretação: status, versão do modelo, custo, tempo e quem pediu. Na emissão: quantos itens/campos você mudou em relação à sugestão da IA (só a contagem). Quando você compartilha um PDF: só o fato e a hora | gerado pelo sistema, **sem o conteúdo** |
-| **Plano** | seu plano (Gratuito ou Profissional), a validade e quando foi ativado. O pagamento, nesta fase, é combinado **fora do app** (ex.: Pix) - o app não recebe dados de cartão ou de conta bancária | definido pelo administrador |
-| **Erros do app** | mensagem técnica do erro, versão do app, modelo/sistema do aparelho e o identificador interno da sua conta | enviado automaticamente quando algo quebra; **sem o conteúdo dos seus orçamentos** |
-| **No seu aparelho** | sessão de login e o rascunho do texto que você está escrevendo | fica só no aparelho |
+- **Conta:** nome e e-mail da sua conta Google; telefone, se você informar
+  (vêm do login com Google e do seu perfil).
+- **Sua empresa:** nome fantasia, razão social, CPF/CNPJ, telefone, e-mail,
+  endereço, logotipo e condições comerciais padrão (você preenche no Perfil).
+- **Seus clientes:** nome, telefone, e-mail, documento, endereço e
+  observações (você cadastra ou escreve no orçamento).
+- **Orçamentos:** o texto original, os itens e valores, local do serviço,
+  condições, versões emitidas e o PDF gerado.
+- **Áudio e imagens:** o áudio que você grava e as fotos/prints que anexa
+  (ver seção 4).
+- **Uso técnico, sem o conteúdo:** para cada leitura de áudio/imagem: tipo,
+  duração ou nº de imagens, tamanho, modelo usado, custo estimado, tempo e se
+  deu certo. Para cada interpretação: status, versão do modelo, custo, tempo
+  e quem pediu. Na emissão: quantos itens/campos você mudou em relação à
+  sugestão da IA (só a contagem). Quando você compartilha um PDF: só o fato e
+  a hora.
+- **Plano:** seu plano (Gratuito ou Profissional), a validade e quando foi
+  ativado. O pagamento, nesta fase, é combinado **fora do app** (ex.: Pix) - o
+  app não recebe dados de cartão ou de conta bancária.
+- **Erros do app, sem o conteúdo dos seus orçamentos:** mensagem técnica do
+  erro, versão do app, modelo/sistema do aparelho e o identificador interno
+  da sua conta, enviados automaticamente quando algo quebra.
+- **No seu aparelho:** a sessão de login e os rascunhos que você está
+  escrevendo - ficam só no aparelho.
 
 Não coletamos localização, contatos do telefone, nem usamos publicidade ou
 rastreadores de marketing.
@@ -85,30 +103,39 @@ compartilhado.
 
 Não vendemos seus dados. Para o app funcionar, usamos estes fornecedores:
 
-| Fornecedor | Para quê | O que recebe | Onde |
-| --- | --- | --- | --- |
-| **Supabase** | banco de dados, login, arquivos (logotipo e PDFs, em pastas privadas) e funções do servidor | todos os dados da conta, empresa, clientes e orçamentos | região de São Paulo (Brasil) |
-| **OpenAI** | entender o texto do orçamento; transcrever áudio; ler o texto de imagens | o texto do orçamento; o áudio; as imagens que você anexou | Estados Unidos |
-| **Google** | login com sua conta Google | seu e-mail e nome | - |
-| **Sentry** | receber relatórios de erro do app e do servidor | mensagem técnica do erro, versão do app, aparelho e o identificador interno da conta (nunca o conteúdo dos orçamentos) | `[PREENCHER: região do projeto no Sentry - EUA ou UE]` |
-| **Expo (EAS)** | entregar o aplicativo e suas atualizações | nada do seu conteúdo; só o aparelho pede a atualização | - |
-| **Grafana Labs (Grafana Cloud)** | painel de métricas de operação usado pela equipe do OrçaAI | só números (contagens, custos estimados, tempos), o identificador interno e o **nome comercial** da sua empresa - nunca orçamentos, clientes ou textos. O Grafana consulta esses números no nosso banco com um acesso só de leitura | `[PREENCHER: região da stack no Grafana Cloud]` |
+- **Supabase** (Brasil, São Paulo): banco de dados, login, arquivos (logotipo
+  e PDFs, em pastas privadas) e funções do servidor. Recebe todos os dados da
+  conta, da empresa, dos clientes e dos orçamentos.
+- **OpenAI** (Estados Unidos): entender o texto do orçamento, transcrever
+  áudio e ler o texto de imagens. Recebe o texto do orçamento, o áudio e as
+  imagens que você anexou.
+- **Google:** login com sua conta Google. Recebe seu e-mail e nome.
+- **Sentry** (Estados Unidos): relatórios de erro do app e do servidor.
+  Recebe a mensagem técnica do erro, a versão do app, o aparelho e o
+  identificador interno da conta - nunca o conteúdo dos orçamentos.
+- **Expo (EAS):** entregar o aplicativo e suas atualizações. Não recebe nada
+  do seu conteúdo; só o aparelho pede a atualização.
+- **Grafana Labs - Grafana Cloud** (Brasil, São Paulo): painel de métricas de
+  operação usado pela equipe do OrçaAI. Recebe só números (contagens, custos
+  estimados, tempos), o identificador interno e o **nome comercial** da sua
+  empresa - nunca orçamentos, clientes ou textos. O Grafana consulta esses
+  números no nosso banco com um acesso só de leitura.
 
 **O que a OpenAI faz com o que recebe** (conforme a documentação oficial da
-OpenAI, conferida em 24/09/2026): os dados enviados pela API **não são usados
-para treinar** os modelos dela; por padrão, os registros de monitoramento de
-abuso podem ser mantidos por **até 30 dias**; a transcrição de áudio não guarda
-o conteúdo. Nós pedimos explicitamente para **não armazenar** as respostas
-(`store: false`). Como a OpenAI fica nos Estados Unidos, há **transferência
-internacional de dados** (LGPD, art. 33), feita apenas para prestar o serviço.
+OpenAI): os dados enviados pela API **não são usados para treinar** os modelos
+dela; por padrão, os registros de monitoramento de abuso podem ser mantidos por
+**até 30 dias**; a transcrição de áudio não guarda o conteúdo. Nós pedimos
+explicitamente para **não armazenar** as respostas. Como a OpenAI e o Sentry
+ficam nos Estados Unidos, há **transferência internacional de dados** (LGPD,
+art. 33), feita apenas para prestar o serviço.
 
 ## 6. Por quanto tempo guardamos
 
 - **Enquanto sua conta existir:** empresa, clientes, orçamentos, versões, PDFs
   e logotipo, para você consultar o histórico.
 - **Áudio e imagens:** não guardamos (seção 4).
-- **Dados técnicos de uso** (custo, tempo, status): enquanto a conta existir; sem
-  conteúdo.
+- **Dados técnicos de uso** (custo, tempo, status): enquanto a conta existir;
+  sem conteúdo.
 - **Quando você exclui a conta** (seção 7): apagamos tudo isso, salvo o que está
   descrito ali como exceção.
 
@@ -121,23 +148,24 @@ consentimentos (LGPD, art. 18).
 
 - **Corrigir** empresa, clientes e orçamentos: direto no app.
 - **Excluir a conta:** em **Perfil > Excluir minha conta**. A conta fica
-  **agendada por 7 dias** (nesse prazo você pode cancelar e voltar a usar); depois
-  disso apagamos automaticamente a empresa, clientes, orçamentos, PDFs,
+  **agendada por 7 dias** (nesse prazo você pode cancelar e voltar a usar);
+  depois disso apagamos automaticamente a empresa, clientes, orçamentos, PDFs,
   logotipo e o próprio login.
-- **Acesso, exportação e demais pedidos:** pelo canal de suporte em
-  **Perfil > Ajuda** no app (WhatsApp/e-mail) ou pelo e-mail
-  `[PREENCHER: e-mail]`. `[PREENCHER: prazo de resposta que você se compromete a cumprir, ex.: 15 dias]`.
-  Hoje **não há botão de exportação** no app; atendemos pelo suporte.
+- **Acesso, exportação e demais pedidos:** pelo suporte em **Perfil > Ajuda**
+  no app ou pelo e-mail `[painel admin: e-mail de privacidade]`. Respondemos no prazo `[painel admin: prazo de resposta, em dias]`. Hoje **não há
+  botão de exportação** no app; atendemos pelo suporte.
 
 **O que não some imediatamente com a exclusão:**
 
-- **Cópias de segurança** do banco de dados (Supabase): podem reter dados já
-  apagados até serem substituídas pelo ciclo normal de backups
-  `[PREENCHER: confirmar o prazo de backup do plano do Supabase]`.
 - **Relatórios de erro** já enviados ao Sentry (contêm apenas o identificador
-  interno, sem conteúdo de orçamento): expiram pelo prazo do próprio Sentry
-  `[PREENCHER: retenção configurada no Sentry]`.
+  interno, sem conteúdo de orçamento): expiram em até **30 dias**.
+- **Registros de abuso da OpenAI**, se houver: até 30 dias, pela política da
+  própria OpenAI.
 - Registros que a lei nos obrigue a manter.
+
+O plano atual do nosso banco de dados **não mantém cópias de segurança
+automáticas**: o que é apagado sai de vez. Se isso mudar, esta política será
+atualizada com o prazo das cópias.
 
 ## 8. Segurança
 
@@ -179,5 +207,5 @@ este texto e avisamos no app. A data da versão está no topo.
 ## 13. Contato e reclamações
 
 Dúvidas ou pedidos: pelo suporte em **Perfil > Ajuda** no app ou pelo e-mail
-`[PREENCHER: e-mail]`. Você também pode reclamar à
-Autoridade Nacional de Proteção de Dados (ANPD): <https://www.gov.br/anpd>.
+`[painel admin: e-mail de privacidade]`. Você também pode reclamar à Autoridade Nacional de Proteção de Dados
+(ANPD): https://www.gov.br/anpd

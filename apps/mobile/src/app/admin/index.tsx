@@ -15,6 +15,7 @@ import {
 
 import { OrganizationChips } from '@/components/admin-organization-chips';
 import { AdminPlanDialog } from '@/components/admin-plan-dialog';
+import { AdminPrivacyCard } from '@/components/admin-privacy-card';
 import { AdminSupportContactCard } from '@/components/admin-support-contact-card';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import {
@@ -106,6 +107,7 @@ export default function AdminOrganizationsScreen() {
             </Text>
             {errorMessage && <Text style={{ color: paperTheme.colors.error }}>{errorMessage}</Text>}
             <AdminSupportContactCard onSaved={setNotice} />
+            <AdminPrivacyCard onSaved={setNotice} />
             {signupPlan && (
               <Card mode="contained">
                 <Card.Content style={styles.signupRow}>

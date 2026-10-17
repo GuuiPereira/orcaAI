@@ -15,3 +15,4 @@ export * from "./pdf/quote-html.ts";
 export * from "./monitoring/sanitize.ts";
 export * from "./pdf/file-name.ts";
 export * from "./ai/extraction.ts";
+export * from "./legal/privacy-policy.ts";

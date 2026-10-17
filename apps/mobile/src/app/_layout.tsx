@@ -32,6 +32,9 @@ function RootLayout() {
   useEffect(() => {
     if (status === 'loading') return;
     const current = segments[0];
+    // A política de privacidade abre em qualquer estado - inclusive antes de
+    // entrar (link na tela de login), conta suspensa ou com exclusão agendada.
+    if (current === 'privacy-policy') return;
     if (status === 'unauthenticated') {
       // auth-callback (alvo web) precisa de tempo pra processar a sessão
       // vinda do hash da URL antes de virar 'ready'/'no-organization' -
