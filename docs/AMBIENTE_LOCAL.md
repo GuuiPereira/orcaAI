@@ -9,7 +9,10 @@ do monorepo (não são globais), por isso todo comando é chamado com
 ## Atalho: subir tudo de uma vez
 
 Pra não precisar abrir três terminais toda vez que for testar, tem um script
-na raiz que sobe a stack do Supabase, a `interpret-quote` e o Expo web juntos:
+na raiz que sobe a stack do Supabase, **todas** as Edge Functions e o Expo web
+juntos (até 2026-10-17 ele subia só a `interpret-quote` - emitir orçamento ou
+usar áudio/imagem localmente falhava, porque `issue-quote` e `extract-input`
+não estavam no ar):
 
 ```bash
 pnpm run dev
@@ -26,7 +29,8 @@ pnpm run dev:stop
 ```
 
 Pré-requisito: `supabase/functions/interpret-quote/.env.local` já configurado
-com uma `OPENAI_API_KEY` válida (ver seção "Testando a `interpret-quote`
+com uma `OPENAI_API_KEY` válida (esse mesmo arquivo serve de env pra todas as
+functions) (ver seção "Testando a `interpret-quote`
 localmente" abaixo). Se preferir controlar cada processo à parte (ex.: pra
 reiniciar só a function depois de mexer nela), use os comandos individuais
 das seções seguintes.

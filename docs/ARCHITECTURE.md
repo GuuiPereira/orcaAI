@@ -10,27 +10,42 @@ fonte de verdade e permite lançar Android e iOS a partir de uma base de código
 
 ## 2. Componentes
 
+Como está implementado (2026-10-17):
+
 ```mermaid
 flowchart LR
-    U["Aplicativo Expo"] --> A["Supabase Auth"]
+    U["Aplicativo Expo"] --> A["Supabase Auth (Google)"]
     U --> D["Postgres com RLS"]
-    U --> S["Supabase Storage"]
+    U --> S["Supabase Storage (privado)"]
     U --> F["Edge Functions"]
     F --> O["OpenAI API"]
-    F --> P["Serviço de PDF"]
     F --> D
-    P --> S
-    U --> M["Compartilhamento nativo"]
+    U --> PDF["PDF gerado no app"]
+    PDF --> S
+    PDF --> M["Compartilhamento nativo"]
+    G["Grafana Cloud"] -->|papel só de leitura| D
+    F --> E["Sentry"]
+    U --> E
 ```
+
+O desenho original previa um "Serviço de PDF" no backend - ver a seção PDF
+abaixo: para o teste fechado o PDF é gerado no app.
 
 ### Aplicativo
 
 - Expo Router para navegação.
 - TypeScript.
-- TanStack Query para estado remoto e cache.
-- React Hook Form com Zod para formulários.
-- `expo-secure-store` para material sensível da sessão.
-- API nativa de compartilhamento para enviar o PDF.
+- React Native Paper para os componentes de interface.
+- Estado de tela com hooks do React; chamadas diretas ao `supabase-js`
+  (o TanStack Query previsto não foi necessário até aqui).
+- Validação com Zod nos schemas compartilhados (`packages/shared`), usados
+  também pelas Edge Functions.
+- Sessão do Supabase no AsyncStorage (o `expo-secure-store` previsto não foi
+  adotado).
+- Rascunhos (texto do novo orçamento e edições da revisão) salvos no aparelho.
+- `expo-print` + `expo-sharing` para gerar e compartilhar o PDF;
+  `expo-audio` e `expo-image-picker`/`expo-image-manipulator` para a entrada
+  por áudio e imagem.
 
 ### Backend
 
@@ -62,6 +77,14 @@ Decisão prática:
 
 - protótipo: PDF local;
 - beta/produção: snapshot imutável e renderização no backend.
+
+**Como está hoje:** o PDF continua **local** (`expo-print`), a partir de um
+template HTML único em `packages/shared/src/pdf/quote-html.ts`. Na emissão o
+servidor grava o snapshot imutável (`quote_versions`) e o app sobe o PDF da
+versão para o Storage privado (`attach-quote-pdf`). A renderização no backend
+fica para quando a variação entre aparelhos ou a regeração de PDF pedirem.
+O rodapé "Feito com OrçaAI" e o logo seguem o plano da organização (decididos
+no app; o limite de emissão é aplicado no servidor).
 
 ## 3. Por que Expo em vez de Flutter
 
@@ -213,8 +236,9 @@ equipes forem adicionadas.
 - descrição;
 - categoria (texto livre, rótulo de agrupamento do próprio texto original);
 - quantidade decimal;
-- unidade;
-- valor unitário e total em centavos;
+- unidade (só faz sentido para material - decisão de 2026-10-15);
+- valor **total** em centavos (não há preço unitário - decisão de
+  2026-08-01);
 - observações.
 
 ### `quote_versions`
@@ -237,7 +261,8 @@ equipes forem adicionadas.
 - resultado JSON;
 - prompt/schema/model version;
 - campos incertos;
-- tokens/uso e custo estimado;
+- tokens/uso e custo estimado (centavos de dólar, `numeric` - exato);
+- quem chamou (`user_id`) e latência da chamada à OpenAI (`latency_ms`);
 - erro sanitizado;
 - timestamps.
 
@@ -250,13 +275,53 @@ equipes forem adicionadas.
 - metadados mínimos;
 - timestamp.
 
+### Tabelas acrescentadas depois do modelo inicial
+
+| Tabela | Para quê |
+| --- | --- |
+| `organization_quote_counters` | numeração sequencial por organização e ano |
+| `input_extractions` | uma linha por leitura de áudio/imagem: tipo, tamanho, custo, latência, status - **sem conteúdo** (a mídia não é guardada) |
+| `ai_quality_metrics` | na emissão: quantos itens/campos o usuário mudou em relação à IA (só contagens) |
+| `account_deletion_requests` | pedido de exclusão com prazo de 7 dias |
+| `platform_admins`, `admin_actions` | quem administra a plataforma e a auditoria append-only das ações |
+| `organization_limits` | limite de IA a cada 24h ajustado por organização (padrão no banco) |
+| `plans`, `organization_subscriptions`, `plan_settings` | planos Gratuito/Profissional, a assinatura de cada organização (com validade) e o plano de quem se cadastra |
+| `support_settings` | contato de suporte exibido no app |
+| views `metrics_*` | métricas de operação (só contagens, somas e tempos) lidas pelo Grafana |
+
+Também: `organizations.suspended_at` (suspensão pelo admin) e o evento
+`compartilhado` em `quote_events` (base do "tempo até compartilhar").
+Detalhes e motivos de cada um nas migrações (`supabase/migrations/`) e em
+[AMBIENTE_LOCAL.md](AMBIENTE_LOCAL.md).
+
 ## 7. Endpoints/funções
 
-- `interpret-quote`: interpreta texto e grava resultado.
-- `apply-interpretation`: aplica resultado confirmado ao rascunho.
-- `issue-quote`: valida, numera, cria snapshot e solicita PDF.
-- `regenerate-quote-pdf`: reprocessa o mesmo snapshot, sem alterar conteúdo.
-- `delete-account`: agenda exclusão e revoga acesso.
+Edge Functions (2026-10-17):
+
+- `interpret-quote`: interpreta o texto e grava o resultado (respeita
+  suspensão e limite de 24h da organização).
+- `extract-input`: transcreve áudio / lê o texto de imagens e devolve só o
+  texto, para o usuário revisar (respeita plano, suspensão e limite).
+- `issue-quote`: valida, recalcula os totais, numera, cria o snapshot
+  imutável e grava a métrica de qualidade da IA (respeita plano e
+  suspensão).
+- `attach-quote-pdf`: liga o PDF (gerado no app) à versão emitida.
+- `delete-account`: agenda ou cancela a exclusão da própria conta.
+- `purge-deleted-accounts`: rotina diária que apaga as contas vencidas.
+- `check-ai-cost`: rotina de hora em hora que alerta (Sentry) quando o custo
+  diário de IA passa do limite.
+
+Funções SQL (`security definer`, chamadas por `rpc`) para o painel admin e
+os planos - todas começam conferindo se quem chama é admin
+(`admin_list_organizations`, `admin_organization_detail`, `admin_set_limits`,
+`admin_suspend_organization`, `admin_reactivate_organization`,
+`admin_unstick_interpretations`, `admin_set_plan`, `admin_set_signup_plan`,
+`admin_set_support_contact`) - e `my_entitlements` / `get_support_contact`
+para o app ler o próprio plano e o contato de suporte.
+
+Previstas e ainda não feitas: `regenerate-quote-pdf` (reprocessar o mesmo
+snapshot). A `apply-interpretation` do desenho original não foi necessária:
+o resultado confirmado vai direto para a emissão.
 
 CRUD simples de clientes e rascunhos pode usar a API do Supabase protegida por
 RLS. Operações que envolvem segredo, numeração, IA ou emissão passam por função.

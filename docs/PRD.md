@@ -169,7 +169,9 @@ propõe dados, mas nunca é a autoridade dos cálculos.
 - RF-080: registrar falhas de interpretação e geração de PDF.
 - RF-081: permitir feedback positivo/negativo sobre a interpretação.
 - RF-082: oferecer canal de suporte sem expor automaticamente o conteúdo do
-  orçamento.
+  orçamento. (Implementado: contato de WhatsApp/e-mail configurado pelo
+  administrador e exibido no app; o painel admin nunca mostra conteúdo de
+  orçamento.)
 
 ## 6. Fora do MVP
 
@@ -294,6 +296,15 @@ Modelo sugerido:
 
 Não fechar preço antes de entrevistar usuários. Faixa de teste qualitativo:
 R$ 19 a R$ 49 por mês para o plano individual.
+
+**Decidido e implementado (2026-10-16):** Gratuito com **3 orçamentos
+emitidos por mês** (reemitir não conta), PDF com rodapé discreto "Feito com
+OrçaAI", **sem logo** no PDF e sem entrada por áudio/imagem; Profissional sem
+limite mensal, sem marca, com logo e com áudio/imagem. "Modelos
+personalizados" ainda não existem. Primeira etapa com **cobrança manual** (o
+administrador ativa o plano, com validade); pagamento automático quando o
+app for para a loja. Durante o teste fechado os testadores entram no
+Profissional. **O preço continua em aberto** - sai das entrevistas.
 
 ## 13. Pesquisa com usuários
 

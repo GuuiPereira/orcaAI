@@ -1,9 +1,11 @@
 # Política de Privacidade do OrçaAI
 
-**Versão 0.1 (rascunho para o teste fechado) - 24/09/2026**
+**Versão 0.2 (rascunho para o teste fechado) - 17/10/2026**
 
 > **Status:** rascunho escrito a partir do que o app realmente faz hoje (código,
-> banco e fornecedores conferidos em 24/09/2026). Os trechos `[PREENCHER: ...]`
+> banco e fornecedores conferidos em 24/09/2026 e revistos em 17/10/2026 -
+> entraram o Grafana Cloud, os planos, o painel do administrador e o contato
+> de suporte). Os trechos `[PREENCHER: ...]`
 > dependem de informação do responsável. **Não substitui revisão jurídica** -
 > para o teste fechado com pessoas conhecidas ela cumpre o papel de
 > transparência; antes de abrir ao público ou cobrar, um advogado deve revisar
@@ -40,7 +42,8 @@ Existem dois papéis diferentes:
 | **Seus clientes** | nome, telefone, e-mail, documento, endereço, observações | você cadastra ou escreve no orçamento |
 | **Orçamentos** | o texto original, os itens e valores, local do serviço, condições, versões emitidas e o PDF gerado | você cria; o PDF é gerado pelo app |
 | **Áudio e imagens** | o áudio que você grava e as fotos/prints que anexa (ver seção 4) | você anexa |
-| **Uso técnico** | para cada leitura de áudio/imagem: tipo, duração ou nº de imagens, tamanho, modelo usado, custo estimado, tempo e se deu certo. Para cada interpretação: status, versão do modelo, custo | gerado pelo sistema, **sem o conteúdo** |
+| **Uso técnico** | para cada leitura de áudio/imagem: tipo, duração ou nº de imagens, tamanho, modelo usado, custo estimado, tempo e se deu certo. Para cada interpretação: status, versão do modelo, custo, tempo e quem pediu. Na emissão: quantos itens/campos você mudou em relação à sugestão da IA (só a contagem). Quando você compartilha um PDF: só o fato e a hora | gerado pelo sistema, **sem o conteúdo** |
+| **Plano** | seu plano (Gratuito ou Profissional), a validade e quando foi ativado. O pagamento, nesta fase, é combinado **fora do app** (ex.: Pix) - o app não recebe dados de cartão ou de conta bancária | definido pelo administrador |
 | **Erros do app** | mensagem técnica do erro, versão do app, modelo/sistema do aparelho e o identificador interno da sua conta | enviado automaticamente quando algo quebra; **sem o conteúdo dos seus orçamentos** |
 | **No seu aparelho** | sessão de login e o rascunho do texto que você está escrevendo | fica só no aparelho |
 
@@ -53,7 +56,10 @@ rastreadores de marketing.
   orçamento, guardar seu histórico): execução do contrato e procedimentos
   preliminares (LGPD, art. 7º, V).
 - **Segurança, prevenção de abuso e limite de uso** (por exemplo, limite diário
-  de leituras por empresa): legítimo interesse (art. 7º, IX).
+  de uso da IA por empresa e, em caso de uso indevido, suspensão da conta -
+  sem apagar seus dados): legítimo interesse (art. 7º, IX).
+- **Aplicar o seu plano** (limite de orçamentos do Gratuito, recursos do
+  Profissional): execução do contrato (art. 7º, V).
 - **Monitorar erros e custos** para o app funcionar bem: legítimo interesse
   (art. 7º, IX). Os dados de erro não trazem o conteúdo dos orçamentos.
 - **Microfone e câmera:** só são usados quando você toca em "Falar" ou "Foto",
@@ -86,6 +92,7 @@ Não vendemos seus dados. Para o app funcionar, usamos estes fornecedores:
 | **Google** | login com sua conta Google | seu e-mail e nome | - |
 | **Sentry** | receber relatórios de erro do app e do servidor | mensagem técnica do erro, versão do app, aparelho e o identificador interno da conta (nunca o conteúdo dos orçamentos) | `[PREENCHER: região do projeto no Sentry - EUA ou UE]` |
 | **Expo (EAS)** | entregar o aplicativo e suas atualizações | nada do seu conteúdo; só o aparelho pede a atualização | - |
+| **Grafana Labs (Grafana Cloud)** | painel de métricas de operação usado pela equipe do OrçaAI | só números (contagens, custos estimados, tempos), o identificador interno e o **nome comercial** da sua empresa - nunca orçamentos, clientes ou textos. O Grafana consulta esses números no nosso banco com um acesso só de leitura | `[PREENCHER: região da stack no Grafana Cloud]` |
 
 **O que a OpenAI faz com o que recebe** (conforme a documentação oficial da
 OpenAI, conferida em 24/09/2026): os dados enviados pela API **não são usados
@@ -117,9 +124,10 @@ consentimentos (LGPD, art. 18).
   **agendada por 7 dias** (nesse prazo você pode cancelar e voltar a usar); depois
   disso apagamos automaticamente a empresa, clientes, orçamentos, PDFs,
   logotipo e o próprio login.
-- **Acesso, exportação e demais pedidos:** pelo e-mail
+- **Acesso, exportação e demais pedidos:** pelo canal de suporte em
+  **Perfil > Ajuda** no app (WhatsApp/e-mail) ou pelo e-mail
   `[PREENCHER: e-mail]`. `[PREENCHER: prazo de resposta que você se compromete a cumprir, ex.: 15 dias]`.
-  Hoje **não há botão de exportação** no app; atendemos por e-mail.
+  Hoje **não há botão de exportação** no app; atendemos pelo suporte.
 
 **O que não some imediatamente com a exclusão:**
 
@@ -136,6 +144,10 @@ consentimentos (LGPD, art. 18).
 - Cada empresa só acessa os **próprios** dados (regras de isolamento no banco).
 - PDFs e logotipos ficam em **pastas privadas**, acessadas por links temporários.
 - As chaves dos fornecedores ficam **só no servidor**, nunca no aplicativo.
+- A equipe do OrçaAI, no painel de administração, vê **só números e estados**
+  da sua conta (uso, plano, limites, erros por código) - **nunca** o conteúdo
+  dos orçamentos, dos clientes ou dos textos. Toda ação do administrador na
+  sua conta (mudar plano ou limite, suspender) fica registrada com o motivo.
 - A comunicação usa conexão criptografada (HTTPS).
 - Nenhum sistema é 100% seguro. Se houver um incidente que possa afetar você,
   avisaremos você e a Autoridade Nacional de Proteção de Dados (ANPD) nos
@@ -166,5 +178,6 @@ este texto e avisamos no app. A data da versão está no topo.
 
 ## 13. Contato e reclamações
 
-Dúvidas ou pedidos: `[PREENCHER: e-mail]`. Você também pode reclamar à
+Dúvidas ou pedidos: pelo suporte em **Perfil > Ajuda** no app ou pelo e-mail
+`[PREENCHER: e-mail]`. Você também pode reclamar à
 Autoridade Nacional de Proteção de Dados (ANPD): <https://www.gov.br/anpd>.
